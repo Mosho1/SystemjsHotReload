@@ -1,27 +1,41 @@
-const instances = new Map();
+const instances = window.instances = new Map();
 
-export default (oldModule, newModule) => {
-
+export default (loadName, {oldModule, newModule}) => {
+	console.log(oldModule,newModule)
 	if (!oldModule) {
-		instances.set(newModule, new Set());
-		const Component = newModule.default;
-		const Module = Object.getPrototypeOf(newModule);
-		return Object.assign(new Module.constructor(), {
-			default: class CachedComponent extends Component {
-				componentWillMount() {
-					instances.set(newModule, instances.get(newModule).add(this));
-				}
-				componentWillUnmount() {
-					instances.set(newModule, instances.get(newModule).delete(this));
-				}
-			}
-		});
+		instances.set(loadName, new Set());
+		oldModule = newModule;
 	} else {
 		oldModule.default.prototype = newModule.default.prototype;
-		const componentInstances = instances.get(oldModule);
-		if (componentInstances) {
-			componentInstances.forEach(instance => instance.forceUpdate());
-		}
-		return oldModule;
+		oldModule.default.__proto__ = newModule.default.__proto__;
 	}
+	
+	const Component = oldModule.default;
+	const noop = x => x;
+	const {componentWillMount = noop, componentWillUnmount = noop} = Component;
+
+	Object.assign(Component.prototype, {
+		componentWillMount() {
+			componentWillMount.call(this);
+			instances.set(loadName, instances.get(loadName).add(this));
+		},
+		componentWillUnmount() {
+			componentWillUnmount.call(this);
+			instances.set(loadName, instances.get(loadName).delete(this));
+		}
+	});
+
+	const Module = Object.getPrototypeOf(oldModule);
+	const componentInstances = instances.get(loadName);
+
+	if (componentInstances) {
+		componentInstances.forEach(instance => {
+			Object.setPrototypeOf(instance, Component.prototype);
+			instance.forceUpdate();
+		});
+	}
+
+	return Object.assign(new Module.constructor(), {
+		default: Component
+	});
 };

@@ -1,27 +1,25 @@
 const cachedModules = new Map();
 
 const systemJSInstantiate = System.instantiate.bind(System);
-System.instantiate = load => {
-	const instantiated = systemJSInstantiate(load);
 
+System.instantiate = load => {
 	const hotReloaderName = load.metadata.hotReload;
 	if (!hotReloaderName) {
-		return instantiated;
+		return systemJSInstantiate(load);
 	}
 
-	return Promise.all([instantiated, System.import(hotReloaderName)])
-		.then(([module, hotReloader]) => {
-			const moduleExecute = module.execute;
-			return Object.assign(module, {
-				execute() {
-					const executed = moduleExecute();
-					const oldModule = cachedModules.get(load.name);
-					const newModule = hotReloader.default(oldModule, executed);
-					cachedModules.set(load.name, newModule);
-					return newModule;
-				}
-			});
+	return Promise.all([systemJSInstantiate(load), System.import(hotReloaderName)]).then(([module, hotReloader]) => {
+		const moduleExecute = module.execute;
+		return Object.assign(module, {
+			execute() {
+				const executed = moduleExecute();
+				const oldModule = cachedModules.get(load.name);
+				const newModule = hotReloader.default(load.name, {oldModule, newModule: executed});
+				cachedModules.set(load.name, newModule);
+				return newModule;
+			}
 		});
+	});
 };
 
 const handleFileChange = path => {
@@ -35,4 +33,4 @@ es.addEventListener('changed', event => {
 	handleFileChange(event.data);
 });
 
-es.onerror = e => window.location.reload();
+es.onerror = () => window.location.reload();

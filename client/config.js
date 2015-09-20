@@ -1,29 +1,25 @@
 System.config({
-  "baseURL": "/",
-  "defaultJSExtensions": true,
-  "transpiler": "babel",
-  "babelOptions": {
+  baseURL: "/",
+  defaultJSExtensions: true,
+  transpiler: "babel",
+  babelOptions: {
     "optional": [
       "runtime"
     ]
   },
-  "paths": {
+  paths: {
     "github:*": "jspm_packages/github/*",
     "npm:*": "jspm_packages/npm/*",
-    "react": '//cdnjs.cloudflare.com/ajax/libs/react/0.13.3/react.js'
-  }
-});
+    "react": "//cdnjs.cloudflare.com/ajax/libs/react/0.13.3/react.js"
+  },
 
-System.config({
-  "meta": {
+  meta: {
     "*.react.js": {
       "hotReload": "hot-reloader"
     }
-  }
-});
+  },
 
-System.config({
-  "map": {
+  map: {
     "babel": "npm:babel-core@5.8.24",
     "babel-runtime": "npm:babel-runtime@5.8.24",
     "core-js": "npm:core-js@0.9.18",
@@ -44,4 +40,3 @@ System.config({
     }
   }
 });
-
