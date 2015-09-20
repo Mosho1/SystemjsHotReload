@@ -1,0 +1,26 @@
+{
+  "name": "systemjs-hot-reload",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "babel-node ./index.js"
+  },
+  "author": "",
+  "license": "ISC",
+  "jspm": {
+    "directories": {
+      "packages": "client/jspm_packages"
+    },
+    "configFile": "client/config.js",
+    "dependencies": {
+      "lodash": "npm:lodash@^3.10.1"
+    },
+    "devDependencies": {
+      "babel": "npm:babel-core@^5.6.4",
+      "babel-runtime": "npm:babel-runtime@^5.6.4",
+      "core-js": "npm:core-js@^0.9.17"
+    }
+  }
+}
