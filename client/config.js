@@ -15,7 +15,7 @@ System.config({
 
   meta: {
     "*.react.js": {
-      "hotReload": "hot-reloader"
+      "hotReload": "hot-reloader",
     }
   },
 
