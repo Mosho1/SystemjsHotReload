@@ -3,6 +3,13 @@ const instances = window.instances = new Map();
 const extendComponent = (loadName, Component) => {
 	const noop = x => x;
 	const {componentWillMount = noop, componentWillUnmount = noop} = Component;
+
+	const DynamicClass = function(...args) {
+		return new DynamicClass.__constructor(...args);
+	};
+
+	DynamicClass.__constructor = Component;
+
 	Object.assign(Component.prototype, {
 		componentWillMount() {
 			componentWillMount.call(this);
@@ -13,13 +20,20 @@ const extendComponent = (loadName, Component) => {
 			instances.set(loadName, instances.get(loadName).delete(this));
 		}
 	});
+
+	return DynamicClass;
 };
 
-const updateInstances = (loadName, Component) => {
+const updateInstances = (loadName, oldComponent, newComponent) => {
+	oldComponent.__constructor  = newComponent;
 	const componentInstances = instances.get(loadName);
 	if (componentInstances) {
 		componentInstances.forEach(instance => {
-			Object.setPrototypeOf(instance, Component.prototype);
+			// set old prototypes
+			Object.setPrototypeOf(instance, newComponent.prototype);
+
+			// set instance props
+			Object.assign(instance, new newComponent(instance.props));
 			instance.forceUpdate();
 		});
 	}
@@ -30,13 +44,12 @@ const isReactComponent = Component =>
 	Object.getPrototypeOf(Component.prototype).constructor.name === 'ReactComponent';
 
 const reloadComponent = (loadName, oldComponent, newComponent) => {
-	oldComponent.prototype = newComponent.prototype;
 
 	if (newComponent === oldComponent) {
-		extendComponent(loadName, oldComponent);
+		oldComponent = extendComponent(loadName, oldComponent);
 	}
 
-	updateInstances(loadName, oldComponent);
+	updateInstances(loadName, oldComponent, newComponent);
 };
 
 export default (loadName, {oldModule, newModule}) => {

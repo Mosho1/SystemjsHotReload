@@ -34,6 +34,7 @@ const applyTransform = window.__applyHotReloadTransform = (name, module) => {
 	return reload(name, hotReloader, module);
 };
 
+// esm export hook
 loader.register = (...args) => {
 	const declare = args.pop();
 	const declareWrapper = (_export, ...yargs) => {
@@ -48,13 +49,31 @@ loader.register = (...args) => {
 	return register.call(loader, ...args, declareWrapper);
 };
 
+// import the loader plugin
 loader.fetch = load => {
-	const hotReloaderName = load.metadata.hotReload;
+	const hotReloader = load.metadata.hotReload;
 
-	const hotReloaderImportPromise = hotReloaderName
-		? System.import(hotReloaderName)
-			.then(hotReloader => cachedHotReloaders.set(load.name, hotReloader))
-		: Promise.resolve();
+	const handler = {
+		string: loader => System.import(loader)
+			.then(importedHotReloader =>
+				cachedHotReloaders.set(load.name, importedHotReloader)),
+		function: loader => {
+			cachedHotReloaders.set(load.name, loader);
+
+			// add an entry here in the case where the loaded modules has no exports but we
+			// still want to reload it (which would typically simply run the module unfancily)
+			cachedModules.set(load.name, null);
+		},
+		boolean: loader => {
+			if (loader) {
+				cachedHotReloaders.set(load.name, x => x);
+				cachedModules.set(load.name, null);
+			}
+		}
+	}[typeof hotReloader] || () => null;
+
+
+	const hotReloaderImportPromise = Promise.resolve(handler(hotReloader));
 
 	return hotReloaderImportPromise.then(() => fetch.call(loader, load));
 };
@@ -64,9 +83,13 @@ loader.translate = load => {
 
 	return translatePromise
 		.then((source) => {
+			// patch in the right hooks
 			if (load.metadata.hotReload) {
+
+				// esm patch
 				source = source.replace(/_export\(/g, '_export(__moduleName, ');
 
+				// cjs patches
 				if (source.match(/\s+exports/)) {
 					source += '\nObject.assign(exports, window.__applyHotReloadTransform(__filename, exports));';
 				}
@@ -80,26 +103,31 @@ loader.translate = load => {
 		});
 };
 
-loader.instantiate = load => {
-	const hotReloaderName = load.metadata.hotReload;
-	const instantiatePromise = instantiate.call(loader, load);
-	if (!hotReloaderName) {
-		return instantiatePromise;
-	}
+// dynamic modules (System.import). This is how swapped modules are brought in.
+// loader.instantiate = load => {
+// 	const hotReloaderName = load.metadata.hotReload;
+// 	const instantiatePromise = instantiate.call(loader, load);
+// 	if (!hotReloaderName) {
+// 		return instantiatePromise;
+// 	}
 
-	return instantiatePromise.then(module => {
-			const moduleExecute = module.execute;
-			return Object.assign(module, {
-				execute() {
-					const executed = moduleExecute();
-					return applyTransform(load.name, executed);
-				}
-			});
-		});
-};
+// 	return instantiatePromise.then(module => {
+// 			const moduleExecute = module.execute;
+// 			return Object.assign(module, {
+// 				execute() {
+// 					const executed = moduleExecute();
+// 					return applyTransform(load.name, executed);
+// 				}
+// 			});
+// 		});
+// };
 
 const handleFileChange = path => {
 	const moduleName = loader.normalizeSync(path);
+	if (!cachedModules.has(moduleName)) {
+		return;
+	}
+	console.log('reloading ' + moduleName);
 	loader.delete(moduleName);
 	loader.import(moduleName);
 };

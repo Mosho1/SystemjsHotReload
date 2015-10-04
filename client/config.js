@@ -16,6 +16,9 @@ System.config({
   meta: {
     "*.react.js": {
       "hotReload": "hot-reloader",
+    },
+    "index.js": {
+      hotReload: true
     }
   },
 
