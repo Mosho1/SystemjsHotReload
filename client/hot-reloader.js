@@ -1,3 +1,5 @@
+import React from 'react';
+
 const instances = window.instances = new Map();
 
 const extendComponent = (loadName, Component) => {
@@ -40,8 +42,7 @@ const updateInstances = (loadName, oldComponent, newComponent) => {
 };
 
 const isReactComponent = Component =>
-	Component.prototype &&
-	Object.getPrototypeOf(Component.prototype).constructor.name === 'ReactComponent';
+	typeof Component === 'function' && Component.prototype instanceof React.Component;
 
 const reloadComponent = (loadName, oldComponent, newComponent) => {
 
