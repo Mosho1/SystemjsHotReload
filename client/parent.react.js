@@ -2,8 +2,6 @@ import React from 'react';
 
 export default class Parent extends React.Component {
 	render() {
-		return <div>hid!!</div>;
+		return <div>hifassd!s</div>;
 	}
 }
-
-export const wat = 9;

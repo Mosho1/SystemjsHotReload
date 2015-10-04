@@ -48,7 +48,7 @@ const fileServer = http.createServer((req, res) => {
   });
 });
 
-fileServer.listen(8080);
+fileServer.listen(8090);
 
 const connectSSE = server => () => {
 	const sse = new SSE(server);
@@ -63,4 +63,4 @@ const connectSSE = server => () => {
 	});
 };
 
-eventServer.listen(8081, connectSSE(eventServer));
+eventServer.listen(8091, connectSSE(eventServer));

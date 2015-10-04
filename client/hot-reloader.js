@@ -1,6 +1,6 @@
 const instances = window.instances = new Map();
 
-const extendComponent = (Component, loadName) => {
+const extendComponent = (loadName, Component) => {
 	const noop = x => x;
 	const {componentWillMount = noop, componentWillUnmount = noop} = Component;
 	Object.assign(Component.prototype, {
@@ -15,7 +15,7 @@ const extendComponent = (Component, loadName) => {
 	});
 };
 
-const updateInsances = (Component, loadName) => {
+const updateInstances = (loadName, Component) => {
 	const componentInstances = instances.get(loadName);
 	if (componentInstances) {
 		componentInstances.forEach(instance => {
@@ -25,9 +25,19 @@ const updateInsances = (Component, loadName) => {
 	}
 };
 
-const isReactComponent = obj =>
+const isReactComponent = Component =>
 	Component.prototype &&
 	Object.getPrototypeOf(Component.prototype).constructor.name === 'ReactComponent';
+
+const reloadComponent = (loadName, oldComponent, newComponent) => {
+	oldComponent.prototype = newComponent.prototype;
+
+	if (newComponent === oldComponent) {
+		extendComponent(loadName, oldComponent);
+	}
+
+	updateInstances(loadName, oldComponent);
+};
 
 export default (loadName, {oldModule, newModule}) => {
 	if (!oldModule) {
@@ -35,24 +45,9 @@ export default (loadName, {oldModule, newModule}) => {
 		oldModule = newModule;
 	}
 
-	const Component = oldModule.default || oldModule;
-
-	// only handle react components
-	if (!isReactComponent(oldModule) || !(isReactComponent(oldModule))) {
-		return Component;
+	if (isReactComponent(oldModule.default)) {
+		reloadComponent(loadName, oldModule.default, newModule.default);
+		return oldModule;
 	}
 
-	oldModule.prototype = newModule.prototype;
-	oldModule.__proto__ = newModule.__proto__;
-
-	extendComponent(Component, loadName);
-	updateInsances(Component, loadName);
-
-	const Module = Object.getPrototypeOf(oldModule);
-	if (Module.toString() !== 'Module') {
-		return Component;
-	}
-	return Object.assign(new Module.constructor(), {
-		default: Component
-	});
 };

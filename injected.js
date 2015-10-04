@@ -6,29 +6,49 @@ const cachedHotReloaders = new Map();
 const instantiate = loader.instantiate;
 const register = loader.register;
 const translate = loader.translate;
+const fetch = loader.fetch;
+
+const reload = (name, reloader, newModule) => {
+	const oldModule = cachedModules.get(name);
+	if (typeof newModule !== 'object') {
+		newModule = {default: newModule};
+	}
+	newModule = loader.newModule(newModule);
+	newModule = reloader(name, {oldModule, newModule});
+	cachedModules.set(name, newModule);
+	return loader.newModule(newModule);
+};
+
+const applyTransform = window.__applyHotReloadTransform = (name, module) => {
+	if (!name || (typeof module !== 'object' && typeof module !== 'function')) {
+		return module;
+	}
+	name = loader.normalizeSync(name);
+	const cachedHotReloader = cachedHotReloaders.get(name);
+	const hotReloader = cachedHotReloader && cachedHotReloader.default;
+
+	if (!hotReloader) {
+		return module;
+	}
+
+	return reload(name, hotReloader, module);
+};
 
 loader.register = (...args) => {
 	const declare = args.pop();
 	const declareWrapper = (_export, ...yargs) => {
 
-		const wrappedExport = (loadName, name, value) => {
-			const cachedHotReloader = cachedHotReloaders.get(loadName);
-			const hotReloader = cachedHotReloader && cachedHotReloader.default;
-			if (!hotReloader) {
-				return _export(name, value);
-			}
-			const oldModule = cachedModules.get(loadName);
-			const newModule = hotReloader(loadName, {oldModule, newModule: value});
-			cachedModules.set(loadName, newModule);
-			_export(name, newModule);
-		};
+		const wrappedExport = (loadName, name, value) =>
+			typeof value === 'undefined'
+				? _export(loadName, name)
+				: _export(applyTransform(loadName, value));
 
 		return declare(wrappedExport, ...yargs);
 	};
 	return register.call(loader, ...args, declareWrapper);
 };
 
-loader.translate = load => {
+loader.fetch = load => {
 	const hotReloaderName = load.metadata.hotReload;
 
 	const hotReloaderImportPromise = hotReloaderName
@@ -36,10 +56,28 @@ loader.translate = load => {
 			.then(hotReloader => cachedHotReloaders.set(load.name, hotReloader))
 		: Promise.resolve();
 
+	return hotReloaderImportPromise.then(() => fetch.call(loader, load));
+};
+
+loader.translate = load => {
 	const translatePromise = translate.call(loader, load);
 
-	return Promise.all([translatePromise, hotReloaderImportPromise])
-		.then(([source]) => source.replace(/_export\(/g, '_export(__moduleName, '));
+	return translatePromise
+		.then((source) => {
+			if (load.metadata.hotReload) {
+				source = source.replace(/_export\(/g, '_export(__moduleName, ');
+
+				if (source.match(/\s+exports/)) {
+					source += '\nObject.assign(exports, window.__applyHotReloadTransform(__filename, exports));';
+				}
+				if (source.match(/module\.exports/)) {
+					source += '\nmodule.exports = window.__applyHotReloadTransform(__filename, module.exports);';
+				}
+			}
+
+			return source;
+
+		});
 };
 
 loader.instantiate = load => {
@@ -54,11 +92,7 @@ loader.instantiate = load => {
 			return Object.assign(module, {
 				execute() {
 					const executed = moduleExecute();
-					const oldModule = cachedModules.get(load.name);
-					const hotReloader = cachedHotReloaders.get(load.name);
-					const newModule = hotReloader.default(load.name, {oldModule, newModule: executed});
-					cachedModules.set(load.name, newModule);
-					return newModule;
+					return applyTransform(load.name, executed);
 				}
 			});
 		});
@@ -70,9 +104,9 @@ const handleFileChange = path => {
 	loader.import(moduleName);
 };
 
-var es = new EventSource('http://localhost:8081/sse');
+var es = new EventSource('http://localhost:8091/sse');
 es.addEventListener('changed', event => {
 	handleFileChange(event.data);
 });
 
-es.onerror = () => window.location.reload();
+es.onerror = e => window.location.reload();
