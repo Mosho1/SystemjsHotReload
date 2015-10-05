@@ -1,16 +1,32 @@
 import SSE from 'sse';
-import http from 'http';
 import send from 'send';
 import path from 'path';
 import through from 'through2';
 import chokidar from 'chokidar';
 import {transformFileSync} from 'babel';
+import {once} from './utils';
 
 let INJECTED_CODE = '<script>' + transformFileSync(path.join(__dirname, '/injected.js')).code + '</script>';
 const rootFolder = 'client';
-let ssePort = 8091;
+
+const connectSSE = once((server, {root}) => {
+	console.log(server)
+	const sse = new SSE(server);
+	sse.on('connection', client => {
+		chokidar
+			.watch('client', {ignored: /jspm_packages/})
+			.on('change', p =>
+				client.send({
+					event: 'changed',
+					data: path.relative(root, p)
+				}));
+	});
+});
 
 const middleware = ({root}) => (req, res, next) => {
+
+	connectSSE(req.client.server, {root});
+
 	if (req.method !== 'GET' && req.method !== 'HEAD') {
 		return next();
 	}
@@ -33,26 +49,6 @@ const middleware = ({root}) => (req, res, next) => {
 		.pipe(res);
 };
 
-const eventServer = http.createServer((req, res) => {
-	res.writeHead(200, {'Content-Type': 'text/plain', 'Access-Control-Allow-Origin': true});
-	res.end('okay');
-});
-
-const connectSSE = (server, {root}) => () => {
-	const sse = new SSE(server);
-	sse.on('connection', client => {
-		chokidar
-			.watch('client', {ignored: /jspm_packages/})
-			.on('change', p =>
-				client.send({
-					event: 'changed',
-					data: path.relative(root, p)
-				}));
-	});
-};
-
-export default ({port = ssePort, root = rootFolder} = {}) => {
-	INJECTED_CODE = INJECTED_CODE.replace('{{port}}', port);
-	eventServer.listen(ssePort, connectSSE(eventServer, {root}));
+export default ({root = rootFolder} = {}) => {
 	return middleware({root});
 };

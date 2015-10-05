@@ -113,7 +113,7 @@ const handleFileChange = path => {
 	loader.import(moduleName);
 };
 
-var es = new EventSource('http://localhost:{{port}}/sse');
+var es = new EventSource('/sse');
 
 es.addEventListener('changed', event => {
 	handleFileChange(event.data);
