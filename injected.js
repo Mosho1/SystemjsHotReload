@@ -103,25 +103,6 @@ loader.translate = load => {
 		});
 };
 
-// dynamic modules (System.import). This is how swapped modules are brought in.
-// loader.instantiate = load => {
-// 	const hotReloaderName = load.metadata.hotReload;
-// 	const instantiatePromise = instantiate.call(loader, load);
-// 	if (!hotReloaderName) {
-// 		return instantiatePromise;
-// 	}
-
-// 	return instantiatePromise.then(module => {
-// 			const moduleExecute = module.execute;
-// 			return Object.assign(module, {
-// 				execute() {
-// 					const executed = moduleExecute();
-// 					return applyTransform(load.name, executed);
-// 				}
-// 			});
-// 		});
-// };
-
 const handleFileChange = path => {
 	const moduleName = loader.normalizeSync(path);
 	if (!cachedModules.has(moduleName)) {
@@ -132,9 +113,8 @@ const handleFileChange = path => {
 	loader.import(moduleName);
 };
 
-var es = new EventSource('http://localhost:8091/sse');
+var es = new EventSource('http://localhost:{{port}}/sse');
+
 es.addEventListener('changed', event => {
 	handleFileChange(event.data);
 });
-
-es.onerror = e => window.location.reload();

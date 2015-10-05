@@ -1,4 +1,4 @@
 import React from 'react';
 import Parent from 'parent.react';
-document.getElementById('app').innerHTML = '';
-React.render(<Parent wat="asswd"/>, document.getElementById('app'));
+
+React.render(<div><Parent wat="d"/><Parent wat="bd"/><Parent wat="da"/></div>, document.getElementById('app'));

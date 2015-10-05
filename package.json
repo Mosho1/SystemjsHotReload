@@ -15,7 +15,9 @@
     },
     "configFile": "client/config.js",
     "dependencies": {
-      "lodash": "npm:lodash@^3.10.1"
+      "babel-core": "npm:babel-core@^5.8.25",
+      "lodash": "npm:lodash@^3.10.1",
+      "react-proxy": "npm:react-proxy@^1.1.1"
     },
     "devDependencies": {
       "babel": "npm:babel-core@^5.6.4",

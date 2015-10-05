@@ -1,11 +1,13 @@
 import React from 'react';
-
+import Child from './child.react';
 export default class Parent extends React.Component {
 	constructor(props) {
 		super(props);
-		this.wat = props.wat + 'aaaaasdawdxxsa';
 	}
+
+	wat = 'awssda';
+
 	render() {
-		return <div>{this.wat}</div>;
+		return <Child wat={this.wat + ''}/>;
 	}
 }
