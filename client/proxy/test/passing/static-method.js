@@ -148,8 +148,8 @@ describe('static method', () => {
         proxy.update(StaticMethodUpdate);
         renderer.render(<Proxy />);
 
-        expect(renderer.getRenderOutput().props.children).toEqual(42);
-        expect(Proxy.getAnswer()).toEqual(42);
+        expect(renderer.getRenderOutput().props.children).toEqual(43);
+        expect(Proxy.getAnswer()).toEqual(43);
         expect(getAnswer()).toEqual(42);
       });
 

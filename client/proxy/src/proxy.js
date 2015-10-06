@@ -1,6 +1,8 @@
 import {cloneInto} from './utils';
 import autobind from 'autobind-decorator';
-
+import bindAutoBindMethods from './bindAutoBindMethods';
+import deleteUnknownAutoBindMethods from './deleteUnknownAutoBindMethods';
+import React from 'react';
 @autobind
 export class Proxy {
 	constructor(Component) {
@@ -19,12 +21,14 @@ export class Proxy {
 				return this.proxied;
 			}
 		});
-
-		Object.defineProperty(this.proxied, 'name', {
-			get: () => {
-				return this.__constructor ? this.__constructor.name : '';
-			}
-		});
+		
+		try {
+			Object.defineProperty(this.proxied, 'name', {
+				get: () => {
+					return this.__constructor ? this.__constructor.name : '';
+				}
+			});
+		} catch(e) {}
 
 		this.update(Component);
 	}
@@ -53,8 +57,16 @@ export class Proxy {
 		Object.observe(this.observed, this.observeHandler);
 	}
 
-	update(Component) {
+	patch(Component) {
+		// static stuff
+		cloneInto(this.proxied, Component);
+		cloneInto(this.proxied.prototype, Component.prototype);
+		this.proxied.__proto__ = Component.__proto__;
+		Object.setPrototypeOf(this.proxied.prototype, Component.prototype);
+	}
 
+	update(Component) {
+	
 		if (this.proxied.prototype.isPrototypeOf(Component.prototype) ||
 			this.proxied.prototype === Component.prototype) {
 			return this;
@@ -77,12 +89,8 @@ export class Proxy {
 			instances
 		});
 		this.__constructor = Component;
-		
-		cloneInto(this.proxied, Component);
-		cloneInto(this.proxied.prototype, Component.prototype);
-		this.proxied.__proto__ = Component.__proto__;
-		Object.setPrototypeOf(this.proxied.prototype, Component.prototype);
 
+		this.patch(Component);
 		this.observe(Component);
 
 		this.proxied.__reactProxy = this;
@@ -92,10 +100,86 @@ export class Proxy {
 		instancesArray
 			.filter(instance => instance.constructor === this.proxied)
 			.forEach(instance => {
-				Object.setPrototypeOf(instance, Component.prototype);
-				Object.assign(instance, new Component(instance.props));
-			});
+				Object.setPrototypeOf(instance, this.proxied.prototype);
+				const newComponent = new Component(instance.props);
 
+				const exclude = ['state',
+					'constructor',
+					'refs',
+					'_reactInternalInstance',
+					'getDOMNode',
+					'props',
+					'context',
+					'prototype',
+					'__proto__',
+					'type'
+				];
+				// cloneInto(instance, this.proxied.prototype, {
+				// 	exclude,
+				// 	// enumerableOnly: true,
+				// 	noDelete: true,
+				// 	onDelete(k, target) {
+				// 		const noop = x => x;
+				// 		// console.log(target[k])
+				// 		// target[k].call = noop;
+				// 		// target[k].apply = noop;
+				// 		// target[k] = noop;
+				// }});
+
+				// const deletedKeys = Reflect.ownKeys(instance.__proto__)
+						// .filter(k =>
+							// this.proxied.prototype.hasOwnProperty(k));
+
+				// deletedKeys.map(k => )
+
+				// Object.assign(instance, this.proxied.prototype);
+
+				const instanceProto = instance.__proto__;
+
+				Reflect.ownKeys(instanceProto).concat(Reflect.ownKeys(instance))
+					.filter(k => !exclude.includes(k) && !this.proxied.prototype.hasOwnProperty(k))
+					.forEach(k => {
+						const noop = x => x;
+						console.log(k)
+						if (instance[k]) {
+							instance[k].call = noop;
+							instance[k].apply = noop;
+							instance[k] = noop;
+						}
+						if (instanceProto[k]) {
+							instanceProto[k].call = noop;
+							instanceProto[k].apply = noop;
+							instanceProto[k] = noop;
+						}
+					});
+
+				Object.setPrototypeOf(instance, this.proxied.prototype);
+				Reflect.ownKeys(instance)
+					.filter(k => !exclude.includes(k) && instance.__proto__.hasOwnProperty(k))
+					.forEach(k => delete instance[k]);
+
+
+
+				// Reflect.ownKeys(this.proxied.prototype)
+				// 	.filter(k => instance)
+
+				// cloneInto(instance.__proto__, this.proxied.prototype, {
+				// 	exclude,
+				// 	// enumerableOnly: true,
+				// 	noDelete: true,
+				// 	onDelete(k, target) {
+				// 		const noop = x => x;
+				// 		// console.log(target[k])
+				// 		// target[k].call = noop;
+				// 		// target[k].apply = noop;
+				// 		// target[k] = noop;
+				// }});
+
+				bindAutoBindMethods(instance);
+				deleteUnknownAutoBindMethods(instance);
+
+
+			});
 		return instancesArray;
 	}
 

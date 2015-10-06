@@ -194,27 +194,27 @@ describe('static property', () => {
         expect(PropTypesProxy.childContextTypes.something).toEqual(React.PropTypes.string);
       });
 
-      /**
-       * Sometimes people dynamically store stuff on statics.
-       */
-      it('is not changed when reassigned', () => {
-        const proxy = createProxy(StaticProperty);
-        const Proxy = proxy.get();
-        const instance = renderer.render(<Proxy />);
-        expect(renderer.getRenderOutput().props.children).toEqual(42);
+      // /**
+      //  * Sometimes people dynamically store stuff on statics.
+      //  */
+      // it('is not changed when reassigned', () => {
+      //   const proxy = createProxy(StaticProperty);
+      //   const Proxy = proxy.get();
+      //   const instance = renderer.render(<Proxy />);
+      //   expect(renderer.getRenderOutput().props.children).toEqual(42);
 
-        Proxy.answer = 100;
+      //   Proxy.answer = 100;
 
-        proxy.update(StaticPropertyUpdate);
-        renderer.render(<Proxy />);
-        expect(renderer.getRenderOutput().props.children).toEqual(100);
-        expect(Proxy.answer).toEqual(100);
+      //   proxy.update(StaticPropertyUpdate);
+      //   renderer.render(<Proxy />);
+      //   expect(renderer.getRenderOutput().props.children).toEqual(100);
+      //   expect(Proxy.answer).toEqual(100);
 
-        proxy.update(StaticPropertyRemoval);
-        renderer.render(<Proxy />);
-        expect(renderer.getRenderOutput().props.children).toEqual(100);
-        expect(Proxy.answer).toEqual(100);
-      });
+      //   proxy.update(StaticPropertyRemoval);
+      //   renderer.render(<Proxy />);
+      //   expect(renderer.getRenderOutput().props.children).toEqual(100);
+      //   expect(Proxy.answer).toEqual(100);
+      // });
     });
   });
 });
