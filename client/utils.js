@@ -50,7 +50,10 @@ export const transform = (obj, valFn = identity, keyFn = identity) => {
 	const ret = {};
 	for (let k in obj) {
 		if (obj.hasOwnProperty(k)) {
-			ret[keyFn(k, obj[k], obj)] = valFn(obj[k], k, obj);
+			const newKey = keyFn(k, obj[k], obj);
+			if (newKey !== false) {
+				ret[newKey] = valFn(obj[k], k, obj);
+			}
 		}
 	}
 	return ret;
@@ -66,3 +69,16 @@ export const mapValues = (obj, fn) => transform(obj, fn, identity);
 export const mapKeys = (obj, fn) => transform(obj, identity, fn);
 
 export const partition = (obj, fn) => [pick(obj, fn), omit(obj, fn)];
+
+export const cloneInto = (target, source) => {
+	for (let k in target) {
+		if (target.hasOwnProperty(k)) {
+			if (source.hasOwnProperty(k)) {
+				target[k] = source[k];
+			} else {
+				delete target[k];
+			}
+		}
+	}
+	return target;
+};

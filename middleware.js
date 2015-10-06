@@ -7,10 +7,8 @@ import {transformFileSync} from 'babel';
 import {once} from './utils';
 
 let INJECTED_CODE = '<script>' + transformFileSync(path.join(__dirname, '/injected.js')).code + '</script>';
-const rootFolder = 'client';
 
 const connectSSE = once((server, {root}) => {
-	console.log(server)
 	const sse = new SSE(server);
 	sse.on('connection', client => {
 		chokidar
@@ -23,9 +21,9 @@ const connectSSE = once((server, {root}) => {
 	});
 });
 
-const middleware = ({root}) => (req, res, next) => {
+const middleware = ({root, server}) => (req, res, next) => {
 
-	connectSSE(req.client.server, {root});
+	connectSSE(server || req.client.server, {root});
 
 	if (req.method !== 'GET' && req.method !== 'HEAD') {
 		return next();
@@ -49,6 +47,6 @@ const middleware = ({root}) => (req, res, next) => {
 		.pipe(res);
 };
 
-export default ({root = rootFolder} = {}) => {
-	return middleware({root});
+export default ({root, server} = {}) => {
+	return middleware({root, server});
 };

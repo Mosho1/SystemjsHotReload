@@ -4,11 +4,13 @@ import finalhandler from 'finalhandler';
 import serveStatic from 'serve-static';
 import systemJSMiddeware from './middleware';
 
-const middleware = systemJSMiddeware();
+const root = 'client';
+
+const middleware = systemJSMiddeware({root});
 
 const index = ['index.html', 'index.htm'];
 
-const serve = serveStatic('client', {index});
+const serve = serveStatic(root, {index});
 const fileServer = http.createServer((req, res) => {
   middleware(req, res, () => {
 		const done = finalhandler(req, res);

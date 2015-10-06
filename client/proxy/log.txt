@@ -1,0 +1,4 @@
+
+> react-proxy@1.1.1 test c:\repos\systemjs-hot-reload\client\proxy
+> mocha --compilers js:babel/register ./test
+

@@ -1,0 +1,34 @@
+{
+  "name": "react-proxy",
+  "version": "1.1.1",
+  "description": "Proxies React components without unmounting or losing their state.",
+  "main": "modules/index.js",
+  "scripts": {
+    "test": "mocha --compilers js:babel/register ./test --watch"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/gaearon/react-proxy.git"
+  },
+  "author": "Dan Abramov <dan.abramov@me.com> (http://github.com/gaearon)",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/gaearon/react-proxy/issues"
+  },
+  "homepage": "https://github.com/gaearon/react-proxy",
+  "devDependencies": {
+    "autobind-decorator": "^1.3.2",
+    "babel": "^5.1.13",
+    "babel-core": "^5.1.13",
+    "babel-loader": "^5.0.0",
+    "expect": "^1.9.0",
+    "mocha": "^2.2.4",
+    "react": "^0.13.2",
+    "rimraf": "^2.4.2",
+    "webpack": "1.4.8"
+  },
+  "dependencies": {
+    "lodash": "^3.7.0",
+    "react-deep-force-update": "^1.0.0"
+  }
+}

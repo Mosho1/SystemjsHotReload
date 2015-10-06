@@ -5,13 +5,16 @@ export default class Parent extends React.Component {
 		super(props);
 	}
 
-	wat = 'awssddddddda';
+	wat = 'da';
 
 	componentWillReceiveProps(props) {
 		this.wat = props.wat;
 	}
 
 	render() {
-		return <Child wat={this.wat + ''}/>;
+		return <Child wat={this.wat + '' + Parent.wet}/>;
 	}
 }
+
+
+console.log(Parent.wet);
