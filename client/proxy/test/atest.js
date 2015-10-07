@@ -5,135 +5,59 @@ import { createProxy } from '../src';
 
 const fixtures = {
   modern: {
-    shouldWarnOnBind: false,
-
-    Counter1x: class Counter1x extends Component {
-      constructor(props) {
-        super(props);
-        this.state = { counter: 0 };
-      }
-
-      increment() {
-        this.setState({
-          counter: this.state.counter + 1
-        });
-      }
+    InstanceProperty: class InstanceProperty {
+      answer = 42;
 
       render() {
-        return <span>{this.state.counter}</span>;
+        return <div>{this.answer}</div>;
       }
     },
 
-    Counter10x: class Counter10x extends Component {
-      constructor(props) {
-        super(props);
-        this.state = { counter: 0 };
-      }
-
-      increment() {
-        this.setState({
-          counter: this.state.counter + 10
-        });
-      }
+    InstancePropertyUpdate: class InstancePropertyUpdate {
+      answer = 43;
 
       render() {
-        return <span>{this.state.counter}</span>;
+        return <div>{this.answer}</div>;
       }
     },
 
-    Counter100x: class Counter100x extends Component {
-      constructor(props) {
-        super(props);
-        this.state = { counter: 0 };
-      }
-
-      increment() {
-        this.setState({
-          counter: this.state.counter + 100
-        });
-      }
-
+    InstancePropertyRemoval: class InstancePropertyRemoval {
       render() {
-        return <span>{this.state.counter}</span>;
-      }
-    },
-
-    CounterWithoutIncrementMethod: class CounterWithoutIncrementMethod extends Component {
-      constructor(props) {
-        super(props);
-        this.state = { counter: 0 };
-      }
-
-      render() {
-        return <span>{this.state.counter}</span>;
+        return <div>{this.answer}</div>;
       }
     }
   },
 
   classic: {
-    shouldWarnOnBind: true,
-
-    Counter1x: React.createClass({
-      getInitialState() {
-        return { counter: 0 };
-      },
-
-      increment() {
-        this.setState({
-          counter: this.state.counter + 1
-        });
+    InstanceProperty: React.createClass({
+      componentWillMount() {
+        this.answer = 42;
       },
 
       render() {
-        return <span>{this.state.counter}</span>;
+        return <div>{this.answer}</div>;
       }
     }),
 
-    Counter10x: React.createClass({
-      getInitialState() {
-        return { counter: 0 };
-      },
-
-      increment() {
-        this.setState({
-          counter: this.state.counter + 10
-        });
+    InstancePropertyUpdate: React.createClass({
+      componentWillMount() {
+        this.answer = 43;
       },
 
       render() {
-        return <span>{this.state.counter}</span>;
+        return <div>{this.answer}</div>;
       }
     }),
 
-    Counter100x: React.createClass({
-      getInitialState() {
-        return { counter: 0 };
-      },
-
-      increment() {
-        this.setState({
-          counter: this.state.counter + 100
-        });
-      },
-
+    InstancePropertyRemoval: React.createClass({
       render() {
-        return <span>{this.state.counter}</span>;
-      }
-    }),
-
-    CounterWithoutIncrementMethod: React.createClass({
-      getInitialState() {
-        return { counter: 0 };
-      },
-
-      render() {
-        return <span>{this.state.counter}</span>;
+        return <div>{this.answer}</div>;
       }
     })
   }
 };
 
-describe('instance method', () => {
+describe('instance property', () => {
   let renderer;
   let warnSpy;
 
@@ -149,141 +73,57 @@ describe('instance method', () => {
 
   Object.keys(fixtures).forEach(type => {
     describe(type, () => {
-      const { Counter1x, Counter10x, Counter100x, CounterWithoutIncrementMethod, shouldWarnOnBind } = fixtures[type];
+      const { InstanceProperty, InstancePropertyUpdate, InstancePropertyRemoval } = fixtures[type];
 
-      it('gets added', () => {
-        const proxy = createProxy(CounterWithoutIncrementMethod);
+      it('is available on proxy class instance', () => {
+        const proxy = createProxy(InstanceProperty);
         const Proxy = proxy.get();
         const instance = renderer.render(<Proxy />);
-        expect(renderer.getRenderOutput().props.children).toEqual(0);
-
-        proxy.update(Counter1x);
-        instance.increment();
-        expect(renderer.getRenderOutput().props.children).toEqual(1);
+        expect(renderer.getRenderOutput().props.children).toEqual(42);
+        expect(instance.answer).toEqual(42);
       });
 
-      it('gets replaced', () => {
-        const proxy = createProxy(Counter1x);
+      it('is changed when reassigned', () => {
+        const proxy = createProxy(InstanceProperty);
         const Proxy = proxy.get();
         const instance = renderer.render(<Proxy />);
-        renderer.render(<Proxy />);
-        expect(renderer.getRenderOutput().props.children).toEqual(0);
-        instance.increment();
-        expect(renderer.getRenderOutput().props.children).toEqual(1);
+        expect(renderer.getRenderOutput().props.children).toEqual(42);
 
-        proxy.update(Counter10x);
-        instance.increment();
-        renderer.render(<Proxy />);
-        expect(renderer.getRenderOutput().props.children).toEqual(11);
+        instance.answer = 100;
 
-        proxy.update(Counter100x);
-        instance.increment();
+        proxy.update(InstancePropertyUpdate);
         renderer.render(<Proxy />);
-        expect(renderer.getRenderOutput().props.children).toEqual(111);
+        expect(renderer.getRenderOutput().props.children).toEqual(43);
+        expect(instance.answer).toEqual(43);
+
+        proxy.update(InstancePropertyRemoval);
+        renderer.render(<Proxy />);
+        expect(renderer.getRenderOutput().props.children).toEqual(undefined);
+        expect(instance.answer).toEqual(undefined);
       });
 
-      it('gets replaced if bound by assignment', () => {
-      	if (type !== 'modern') return;
-        const proxy = createProxy(Counter1x);
-        const Proxy = proxy.get();
-        const instance = renderer.render(<Proxy />);
+      /**
+       * I'm not aware of any way of retrieving their new values
+       * without calling the constructor, which seems like too much
+       * of a side effect. We also don't want to overwrite them
+       * in case they changed.
+       */
+      // it('is left unchanged even if not reassigned (known limitation)', () => {
+      //   const proxy = createProxy(InstanceProperty);
+      //   const Proxy = proxy.get();
+      //   const instance = renderer.render(<Proxy />);
+      //   expect(renderer.getRenderOutput().props.children).toEqual(42);
 
-        warnSpy.destroy();
-        const localWarnSpy = expect.spyOn(console, 'warn');
+      //   proxy.update(InstancePropertyUpdate);
+      //   renderer.render(<Proxy />);
+      //   expect(renderer.getRenderOutput().props.children).toEqual(42);
+      //   expect(instance.answer).toEqual(42);
 
-        instance.increment = instance.increment.bind(instance);
-
-        expect(localWarnSpy.calls.length).toBe(shouldWarnOnBind ? 1 : 0);
-        localWarnSpy.destroy();
-
-        expect(renderer.getRenderOutput().props.children).toEqual(0);
-        instance.increment();
-        expect(renderer.getRenderOutput().props.children).toEqual(1);
-
-        proxy.update(Counter10x);
-        instance.increment();
-        renderer.render(<Proxy />);
-        expect(renderer.getRenderOutput().props.children).toEqual(11);
-
-        proxy.update(Counter100x);
-        instance.increment();
-        renderer.render(<Proxy />);
-        expect(renderer.getRenderOutput().props.children).toEqual(111);
-      });
-
-      it('gets replaced if bound by redefinition', () => {
-        const proxy = createProxy(Counter1x);
-        const Proxy = proxy.get();
-        const instance = renderer.render(<Proxy />);
-
-        warnSpy.destroy();
-        const localWarnSpy = expect.spyOn(console, 'warn');
-
-        Object.defineProperty(instance, 'increment', {
-          value: instance.increment.bind(instance),
-          configurable: true
-        });
-
-        expect(localWarnSpy.calls.length).toBe(shouldWarnOnBind ? 1 : 0);
-        localWarnSpy.destroy();
-
-        expect(renderer.getRenderOutput().props.children).toEqual(0);
-        instance.increment();
-        expect(renderer.getRenderOutput().props.children).toEqual(1);
-
-        proxy.update(Counter10x);
-        instance.increment();
-        renderer.render(<Proxy />);
-        expect(renderer.getRenderOutput().props.children).toEqual(11);
-
-        proxy.update(Counter100x);
-        instance.increment();
-        renderer.render(<Proxy />);
-        expect(renderer.getRenderOutput().props.children).toEqual(111);
-      });
-
-     // //  // /**
-     // //  //  * It is important to make deleted methods no-ops
-     // //  //  * so they don't crash if setTimeout-d or setInterval-d.
-     // //  //  */
-      it('is detached and acts as a no-op if not reassigned and deleted', () => {
-        const proxy = createProxy(Counter1x);
-        const Proxy = proxy.get();
-        const instance = renderer.render(<Proxy />);
-        expect(renderer.getRenderOutput().props.children).toEqual(0);
-        instance.increment();
-        const savedIncrement = instance.increment;
-        expect(renderer.getRenderOutput().props.children).toEqual(1);
-
-        proxy.update(CounterWithoutIncrementMethod);
-
-        // TODO: see to this
-        expect(instance.increment).toEqual(undefined);
-        console.log(savedIncrement.call.toString())
-        savedIncrement.call(instance);
-        renderer.render(<Proxy />);
-	    expect(renderer.getRenderOutput().props.children).toEqual(1);
-      });
-
-      it('is attached and acts as a no-op if reassigned and deleted', () => {
-        const proxy = createProxy(Counter1x);
-        const Proxy = proxy.get();
-        const instance = renderer.render(<Proxy />);
-
-        // Pass an additional argument so that in classic mode,
-        // autobinding doesn't provide us a cached bound handler,
-        // and instead actually performs the bind (which is being tested).
-        instance.increment = instance.increment.bind(instance, 'lol');
-
-        expect(renderer.getRenderOutput().props.children).toEqual(0);
-        instance.increment();
-        expect(renderer.getRenderOutput().props.children).toEqual(1);
-
-        proxy.update(CounterWithoutIncrementMethod);
-        instance.increment();
-        renderer.render(<Proxy />);
-        // expect(renderer.getRenderOutput().props.children).toEqual(1);
-      });
+      //   proxy.update(InstancePropertyRemoval);
+      //   renderer.render(<Proxy />);
+      //   expect(renderer.getRenderOutput().props.children).toEqual(42);
+      //   expect(instance.answer).toEqual(42);
+      // });
     });
   });
 });

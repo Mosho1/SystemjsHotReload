@@ -2,7 +2,11 @@ import {cloneInto} from './utils';
 import autobind from 'autobind-decorator';
 import bindAutoBindMethods from './bindAutoBindMethods';
 import deleteUnknownAutoBindMethods from './deleteUnknownAutoBindMethods';
+import createShallowRenderer from './createShallowRenderer';
 import React from 'react';
+
+const renderer = createShallowRenderer();
+
 @autobind
 export class Proxy {
 	constructor(Component) {
@@ -59,6 +63,7 @@ export class Proxy {
 
 	patch(Component) {
 		// static stuff
+		this.oldProxiedDisplayName = this.proxied.displayName
 		cloneInto(this.proxied, Component);
 		cloneInto(this.proxied.prototype, Component.prototype);
 		this.proxied.__proto__ = Component.__proto__;
@@ -75,7 +80,8 @@ export class Proxy {
 		const {instances} = this;
 
 		const noop = x => x;
-		const {componentWillMount = noop, componentWillUnmount = noop} = Component;
+
+		const {componentWillMount = noop, componentWillUnmount = noop} = Component.prototype;
 
 		Object.assign(Component.prototype, {
 			componentWillMount() {
@@ -100,10 +106,8 @@ export class Proxy {
 		instancesArray
 			.filter(instance => instance.constructor === this.proxied)
 			.forEach(instance => {
-				Object.setPrototypeOf(instance, this.proxied.prototype);
-				const newComponent = new Component(instance.props);
-
 				const exclude = ['state',
+					'componentWillMount',
 					'constructor',
 					'refs',
 					'_reactInternalInstance',
@@ -135,21 +139,44 @@ export class Proxy {
 				// Object.assign(instance, this.proxied.prototype);
 
 				const instanceProto = instance.__proto__;
+				const newInstance = renderer.render(<this.proxied {...instance.props}/>);
+				console.log(renderer.render(<React.Component/>))
+				// console.log(newInstance.answer)
+				// const newInstance = new this.proxied(instance.props);
+				// console.log(newInstance)
 
 				Reflect.ownKeys(instanceProto).concat(Reflect.ownKeys(instance))
 					.filter(k => !exclude.includes(k) && !this.proxied.prototype.hasOwnProperty(k))
 					.forEach(k => {
-						const noop = x => x;
-						console.log(k)
+
+						if (newInstance.hasOwnProperty(k)) {
+							instance[k] = newInstance[k];
+							return;
+						} else if (!(instance[k] instanceof Object)) {
+							delete instance[k];
+							return;
+						}
+
+						const noop = () => null;
 						if (instance[k]) {
 							instance[k].call = noop;
 							instance[k].apply = noop;
-							instance[k] = noop;
 						}
-						if (instanceProto[k]) {
-							instanceProto[k].call = noop;
-							instanceProto[k].apply = noop;
-							instanceProto[k] = noop;
+						if (instance.hasOwnProperty(k)) {
+
+							const reactBoundContext = instance[k].__reactBoundContext;
+							const reactBoundArgs = instance[k].__reactBoundArguments;
+
+							if (!reactBoundContext) {
+								this.proxied.prototype[k] = noop;
+							} else if (reactBoundArgs) {
+								instance[k] = noop;
+							} else {
+								delete instance[k];
+							}
+
+						} else {
+							delete this.proxied.prototype[k];
 						}
 					});
 

@@ -149,7 +149,6 @@ describe('instance method', () => {
 
   Object.keys(fixtures).forEach(type => {
     describe(type, () => {
-      if (type === 'modern') return;
       const { Counter1x, Counter10x, Counter100x, CounterWithoutIncrementMethod, shouldWarnOnBind } = fixtures[type];
 
       it('gets added', () => {
@@ -184,6 +183,7 @@ describe('instance method', () => {
       });
 
       it('gets replaced if bound by assignment', () => {
+        if (type !== 'modern') return;
         const proxy = createProxy(Counter1x);
         const Proxy = proxy.get();
         const instance = renderer.render(<Proxy />);
@@ -220,7 +220,8 @@ describe('instance method', () => {
         const localWarnSpy = expect.spyOn(console, 'warn');
 
         Object.defineProperty(instance, 'increment', {
-          value: instance.increment.bind(instance)
+          value: instance.increment.bind(instance),
+          configurable: true
         });
 
         expect(localWarnSpy.calls.length).toBe(shouldWarnOnBind ? 1 : 0);
@@ -241,23 +242,23 @@ describe('instance method', () => {
         expect(renderer.getRenderOutput().props.children).toEqual(111);
       });
 
-      // /**
-      //  * It is important to make deleted methods no-ops
-      //  * so they don't crash if setTimeout-d or setInterval-d.
-      //  */
+     // // //  // /**
+     // // //  //  * It is important to make deleted methods no-ops
+     // // //  //  * so they don't crash if setTimeout-d or setInterval-d.
+     // // //  //  */
       it('is detached and acts as a no-op if not reassigned and deleted', () => {
         const proxy = createProxy(Counter1x);
         const Proxy = proxy.get();
         const instance = renderer.render(<Proxy />);
         expect(renderer.getRenderOutput().props.children).toEqual(0);
         instance.increment();
-        const savedIncrement = instance.increment;
+        let savedIncrement = instance.increment;
         expect(renderer.getRenderOutput().props.children).toEqual(1);
-
         proxy.update(CounterWithoutIncrementMethod);
 
-        // TODO: see to this
-        // expect(instance.increment).toEqual(undefined);
+     //    // TODO: see to this
+        expect(instance.increment).toEqual(undefined);
+      expect(renderer.getRenderOutput().props.children).toEqual(1);
         savedIncrement.call(instance);
         renderer.render(<Proxy />);
       expect(renderer.getRenderOutput().props.children).toEqual(1);
@@ -272,7 +273,6 @@ describe('instance method', () => {
         // autobinding doesn't provide us a cached bound handler,
         // and instead actually performs the bind (which is being tested).
         instance.increment = instance.increment.bind(instance, 'lol');
-
         expect(renderer.getRenderOutput().props.children).toEqual(0);
         instance.increment();
         expect(renderer.getRenderOutput().props.children).toEqual(1);
