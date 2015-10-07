@@ -71,6 +71,8 @@ export class Proxy {
 	}
 
 	update(Component) {
+
+		// console.log(Component.prototype.componentWillMount.toString())
 	
 		if (this.proxied.prototype.isPrototypeOf(Component.prototype) ||
 			this.proxied.prototype === Component.prototype) {
@@ -81,7 +83,10 @@ export class Proxy {
 
 		const noop = x => x;
 
-		const {componentWillMount = noop, componentWillUnmount = noop} = Component.prototype;
+		let {componentWillMount, componentWillUnmount} = Component.prototype;
+
+		componentWillMount = componentWillMount || noop;
+		componentWillUnmount = componentWillUnmount || noop;
 
 		Object.assign(Component.prototype, {
 			componentWillMount() {
@@ -139,11 +144,13 @@ export class Proxy {
 				// Object.assign(instance, this.proxied.prototype);
 
 				const instanceProto = instance.__proto__;
-				const newInstance = renderer.render(<this.proxied {...instance.props}/>);
-				console.log(renderer.render(<React.Component/>))
+				// const newInstance = renderer.render(<this.proxied {...instance.props}/>);
+				// const newInstance = renderer.render(<this.proxied {...instance.props}/>);
 				// console.log(newInstance.answer)
-				// const newInstance = new this.proxied(instance.props);
-				// console.log(newInstance)
+				const newInstance = new this.proxied(instance.props);
+				newInstance.componentWillMount();
+				
+				cloneInto(instance, newInstance);
 
 				Reflect.ownKeys(instanceProto).concat(Reflect.ownKeys(instance))
 					.filter(k => !exclude.includes(k) && !this.proxied.prototype.hasOwnProperty(k))
