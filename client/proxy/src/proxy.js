@@ -3,6 +3,7 @@ import autobind from 'autobind-decorator';
 import bindAutoBindMethods from './bindAutoBindMethods';
 import deleteUnknownAutoBindMethods from './deleteUnknownAutoBindMethods';
 import createShallowRenderer from './createShallowRenderer';
+import bindall from 'lodash.bindall';
 import React from 'react';
 
 const renderer = createShallowRenderer();
@@ -66,7 +67,9 @@ export class Proxy {
 		this.oldProxiedDisplayName = this.proxied.displayName
 		cloneInto(this.proxied, Component);
 		cloneInto(this.proxied.prototype, Component.prototype);
-		this.proxied.__proto__ = Component.__proto__;
+		// this.proxied.__proto__ = Component.__proto__;
+		// this.proxied.prototype.__proto__ = Component.prototype;
+		Object.setPrototypeOf(this.proxied, Object.getPrototypeOf(Component));
 		Object.setPrototypeOf(this.proxied.prototype, Component.prototype);
 	}
 
@@ -113,6 +116,7 @@ export class Proxy {
 			.forEach(instance => {
 				const exclude = ['state',
 					'componentWillMount',
+					'componentWillUnmount',
 					'constructor',
 					'refs',
 					'_reactInternalInstance',
@@ -121,45 +125,48 @@ export class Proxy {
 					'context',
 					'prototype',
 					'__proto__',
-					'type'
+					'type',
+					'instances',
 				];
-				// cloneInto(instance, this.proxied.prototype, {
-				// 	exclude,
-				// 	// enumerableOnly: true,
-				// 	noDelete: true,
-				// 	onDelete(k, target) {
-				// 		const noop = x => x;
-				// 		// console.log(target[k])
-				// 		// target[k].call = noop;
-				// 		// target[k].apply = noop;
-				// 		// target[k] = noop;
-				// }});
 
-				// const deletedKeys = Reflect.ownKeys(instance.__proto__)
-						// .filter(k =>
-							// this.proxied.prototype.hasOwnProperty(k));
-
-				// deletedKeys.map(k => )
-
-				// Object.assign(instance, this.proxied.prototype);
-
-				const instanceProto = instance.__proto__;
-				// const newInstance = renderer.render(<this.proxied {...instance.props}/>);
-				// const newInstance = renderer.render(<this.proxied {...instance.props}/>);
-				// console.log(newInstance.answer)
+				const instanceProto = Object.getPrototypeOf(instance);
+				Object.setPrototypeOf(instance, this.proxied.prototype);
 				const newInstance = new this.proxied(instance.props);
 				newInstance.componentWillMount();
-				
-				cloneInto(instance, newInstance);
+				// console.log(newInstance)
+				if (!newInstance.hasOwnProperty('getDOMNode')) {
+					// massive hack for autbind decorator
+					Object.getOwnPropertyNames(this.proxied.prototype).filter(k => !exclude.includes(k)).forEach(k => {
+						const getter = Object.getOwnPropertyDescriptor(this.proxied.prototype, k).get;
+						if (!getter) return;
+						const unboundFn = getter.call();
+						delete instance[k];
+						Object.defineProperty(instance, k, {
+							get() {
+								return unboundFn.bind(instance);
+							},
+							configurable: true
+						});
+
+						exclude.push(k)
+					});
+				} else {
+
+					// console.log(Object.getOwnPropertyNames(this.proxied.prototype).filter(k => !exclude.includes(k)))
+					console.log(this.proxied.prototype.increment.toString())
+				}
+
+				cloneInto(instance, newInstance, {exclude});
+
+				// bindall(instance);
 
 				Reflect.ownKeys(instanceProto).concat(Reflect.ownKeys(instance))
-					.filter(k => !exclude.includes(k) && !this.proxied.prototype.hasOwnProperty(k))
+					.filter(k => !exclude.includes(k) && !this.proxied.prototype[k])
 					.forEach(k => {
-
 						if (newInstance.hasOwnProperty(k)) {
 							instance[k] = newInstance[k];
 							return;
-						} else if (!(instance[k] instanceof Object)) {
+						} else if (instance[k] && !(instance[k] instanceof Object)) {
 							delete instance[k];
 							return;
 						}
@@ -187,27 +194,12 @@ export class Proxy {
 						}
 					});
 
-				Object.setPrototypeOf(instance, this.proxied.prototype);
+
+
 				Reflect.ownKeys(instance)
 					.filter(k => !exclude.includes(k) && instance.__proto__.hasOwnProperty(k))
 					.forEach(k => delete instance[k]);
 
-
-
-				// Reflect.ownKeys(this.proxied.prototype)
-				// 	.filter(k => instance)
-
-				// cloneInto(instance.__proto__, this.proxied.prototype, {
-				// 	exclude,
-				// 	// enumerableOnly: true,
-				// 	noDelete: true,
-				// 	onDelete(k, target) {
-				// 		const noop = x => x;
-				// 		// console.log(target[k])
-				// 		// target[k].call = noop;
-				// 		// target[k].apply = noop;
-				// 		// target[k] = noop;
-				// }});
 
 				bindAutoBindMethods(instance);
 				deleteUnknownAutoBindMethods(instance);

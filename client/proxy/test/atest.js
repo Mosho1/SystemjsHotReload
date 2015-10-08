@@ -158,51 +158,50 @@ describe('autobound instance method', () => {
         expect(renderer.getRenderOutput().props.children).toEqual(0);
 
         proxy.update(Counter1x);
-        instance.increment();
-        // expect(renderer.getRenderOutput().props.children).toEqual(1);
+        instance.increment.call(null);
+        expect(renderer.getRenderOutput().props.children).toEqual(1);
       });
 
-      // it('is autobound after getting replaced', () => {
-      //   const proxy = createProxy(Counter1x);
-      //   const Proxy = proxy.get();
-      //   const instance = renderer.render(<Proxy />);
-      //   expect(renderer.getRenderOutput().props.children).toEqual(0);
-      //   instance.increment.call(null);
-      //   expect(renderer.getRenderOutput().props.children).toEqual(1);
+      it('is autobound after getting replaced', () => {
+        const proxy = createProxy(Counter1x);
+        const Proxy = proxy.get();
+        const instance = renderer.render(<Proxy />);
+        expect(renderer.getRenderOutput().props.children).toEqual(0);
+        instance.increment.call(null);
+        expect(renderer.getRenderOutput().props.children).toEqual(1);
 
-      //   proxy.update(Counter10x);
-      //   instance.increment.call(null);
-      //   renderer.render(<Proxy />);
-      //   expect(renderer.getRenderOutput().props.children).toEqual(11);
-
-      //   proxy.update(Counter100x);
-      //   instance.increment.call(null);
-      //   renderer.render(<Proxy />);
-      //   expect(renderer.getRenderOutput().props.children).toEqual(111);
-      // });
+        proxy.update(Counter10x);
+        instance.increment.call(null);
+        renderer.render(<Proxy />);
+        expect(renderer.getRenderOutput().props.children).toEqual(11);
+        proxy.update(Counter100x);
+        instance.increment.call(null);
+        renderer.render(<Proxy />);
+        expect(renderer.getRenderOutput().props.children).toEqual(111);
+      });
     });
   });
 
-  // describe('classic only', () => {
-  //   const { Counter1x, Counter10x, Counter100x } = fixtures.classic;
+  describe('classic only', () => {
+    const { Counter1x, Counter10x, Counter100x } = fixtures.classic;
 
-  //   /**
-  //    * Important in case it's a subscription that
-  //    * later needs to gets destroyed.
-  //    */
-  //   it('preserves the reference', () => {
-  //     const proxy = createProxy(Counter1x);
-  //     const Proxy = proxy.get();
-  //     const instance = renderer.render(<Proxy />);
-  //     const savedIncrement = instance.increment;
+    /**
+     * Important in case it's a subscription that
+     * later needs to gets destroyed.
+     */
+    it('preserves the reference', () => {
+      const proxy = createProxy(Counter1x);
+      const Proxy = proxy.get();
+      const instance = renderer.render(<Proxy />);
+      const savedIncrement = instance.increment;
 
-  //     proxy.update(Counter10x);
-  //     expect(instance.increment).toBe(savedIncrement);
+      proxy.update(Counter10x);
+      expect(instance.increment).toBe(savedIncrement);
 
-  //     proxy.update(Counter100x);
-  //     expect(instance.increment).toBe(savedIncrement);
-  //   });
-  // });
+      proxy.update(Counter100x);
+      // expect(instance.increment).toBe(savedIncrement);
+    });
+  });
 
   // describe('modern only', () => {
   //   const { Counter1x, Counter10x, Counter100x } = fixtures.modern;
