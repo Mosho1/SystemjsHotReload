@@ -1,139 +1,85 @@
 import React, { Component } from 'react';
 import createShallowRenderer from './helpers/createShallowRenderer';
-import autobind from './helpers/autobind';
 import expect from 'expect';
 import { createProxy } from '../src';
 
 const fixtures = {
-  classic: {
-    Counter1x: React.createClass({
-      getInitialState() {
-        return { counter: 0 };
-      },
-
-      increment() {
-        this.setState({
-          counter: this.state.counter + 1
-        });
-      },
-
-      render() {
-        return <span>{this.state.counter}</span>;
-      }
-    }),
-
-    Counter10x: React.createClass({
-      getInitialState() {
-        return { counter: 0 };
-      },
-
-      increment() {
-        this.setState({
-          counter: this.state.counter + 10
-        });
-      },
-
-      render() {
-        return <span>{this.state.counter}</span>;
-      }
-    }),
-
-    Counter100x: React.createClass({
-      getInitialState() {
-        return { counter: 0 };
-      },
-
-      increment() {
-        this.setState({
-          counter: this.state.counter + 100
-        });
-      },
-
-      render() {
-        return <span>{this.state.counter}</span>;
-      }
-    }),
-
-    CounterWithoutIncrementMethod: React.createClass({
-      getInitialState() {
-        return { counter: 0 };
-      },
-
-      render() {
-        return <span>{this.state.counter}</span>;
-      }
-    })
-  },
-
   modern: {
-    Counter1x: class Counter1x extends Component {
-      constructor(props) {
-        super(props);
-        this.state = { counter: 0 };
+    Bar: class Bar {
+      componentWillUnmount() {
+        this.didUnmount = true;
       }
 
-      @autobind
-      increment() {
-        this.setState({
-          counter: this.state.counter + 1
-        });
+      doNothing() {
       }
 
       render() {
-        return <span>{this.state.counter}</span>;
+        return <div>Bar</div>;
       }
     },
 
-    Counter10x: class Counter10x extends Component {
-      constructor(props) {
-        super(props);
-        this.state = { counter: 0 };
-      }
-
-      @autobind
-      increment() {
-        this.setState({
-          counter: this.state.counter + 10
-        });
+    Baz: class Baz {
+      componentWillUnmount() {
+        this.didUnmount = true;
       }
 
       render() {
-        return <span>{this.state.counter}</span>;
+        return <div>Baz</div>;
       }
     },
 
-    Counter100x: class Counter100x extends Component {
-      constructor(props) {
-        super(props);
-        this.state = { counter: 0 };
-      }
+    Foo: class Foo {
+      static displayName = 'Foo (Custom)';
 
-      @autobind
-      increment() {
-        this.setState({
-          counter: this.state.counter + 100
-        });
+      componentWillUnmount() {
+        this.didUnmount = true;
       }
 
       render() {
-        return <span>{this.state.counter}</span>;
-      }
-    },
-
-    CounterWithoutIncrementMethod: class CounterWithoutIncrementMethod extends Component {
-      constructor(props) {
-        super(props);
-        this.state = { counter: 0 };
-      }
-
-      render() {
-        return <span>{this.state.counter}</span>;
+        return <div>Foo</div>;
       }
     }
+  },
+
+  classic: {
+    Bar: React.createClass({
+      componentWillUnmount() {
+        this.didUnmount = true;
+      },
+
+      doNothing() {
+      },
+
+      render() {
+        return <div>Bar</div>;
+      }
+    }),
+
+    Baz: React.createClass({
+      componentWillUnmount() {
+        this.didUnmount = true;
+      },
+
+      render() {
+        return <div>Baz</div>;
+      }
+    }),
+
+    Foo: React.createClass({
+      displayName: 'Foo (Custom)',
+
+      componentWillUnmount() {
+        this.didUnmount = true;
+      },
+
+      render() {
+        return <div>Foo</div>;
+      }
+    })
   }
 };
 
-describe('autobound instance method', () => {
+describe('consistency', () => {
   let renderer;
   let warnSpy;
 
@@ -149,80 +95,173 @@ describe('autobound instance method', () => {
 
   Object.keys(fixtures).forEach(type => {
     describe(type, () => {
-      const { Counter1x, Counter10x, Counter100x, CounterWithoutIncrementMethod } = fixtures[type];
+      const { Bar, Baz, Foo } = fixtures[type];
 
-      it('gets autobound', () => {
-        const proxy = createProxy(CounterWithoutIncrementMethod);
+      it('does not overwrite the original class', () => {
+        const proxy = createProxy(Bar);
         const Proxy = proxy.get();
-        const instance = renderer.render(<Proxy />);
-        expect(renderer.getRenderOutput().props.children).toEqual(0);
+        const barInstance = renderer.render(<Proxy />);
+        expect(renderer.getRenderOutput().props.children).toEqual('Bar');
 
-        proxy.update(Counter1x);
-        instance.increment();
-        // expect(renderer.getRenderOutput().props.children).toEqual(1);
+        proxy.update(Baz);
+        const realBarInstance = renderer.render(<Bar />);
+        expect(renderer.getRenderOutput().props.children).toEqual('Bar');
+        expect(barInstance).toNotEqual(realBarInstance);
+        expect(barInstance.didUnmount).toEqual(true);
       });
 
-      // it('is autobound after getting replaced', () => {
-      //   const proxy = createProxy(Counter1x);
+      it('returns an existing proxy when wrapped twice', () => {
+        const proxy = createProxy(Bar);
+        const Proxy = proxy.get();
+        const proxyTwice = createProxy(Proxy);
+
+        console.log(proxyTwice === proxy)
+        expect(proxyTwice).toBe(proxy);
+      });
+
+      it('prevents recursive proxy cycle', () => {
+        const proxy = createProxy(Bar);
+        const Proxy = proxy.get();
+        proxy.update(Proxy);
+        expect(proxy.get()).toEqual(Proxy);
+      });
+
+      // it('prevents mutually recursive proxy cycle', () => {
+      //   const barProxy = createProxy(Bar);
+      //   const BarProxy = barProxy.get();
+
+      //   const fooProxy = createProxy(Foo);
+      //   const FooProxy = fooProxy.get();
+
+      //   barProxy.update(FooProxy);
+      //   fooProxy.update(BarProxy);
+      // });
+
+      // it('sets up constructor to match the type', () => {
+      //   let proxy = createProxy(Bar);
+      //   const BarProxy = proxy.get();
+      //   const barInstance = renderer.render(<BarProxy />);
+      //   expect(barInstance.constructor).toEqual(BarProxy);
+      //   // expect(barInstance instanceof BarProxy).toEqual(true);
+
+      //   proxy.update(Baz);
+      //   const BazProxy = proxy.get();
+      //   expect(BarProxy).toEqual(BazProxy);
+      //   expect(barInstance.constructor).toEqual(BazProxy);
+      //   // expect(barInstance instanceof BazProxy).toEqual(true);
+      // });
+
+      // it('sets up displayName from displayName or name', () => {
+      //   let proxy = createProxy(Bar);
       //   const Proxy = proxy.get();
-      //   const instance = renderer.render(<Proxy />);
-      //   expect(renderer.getRenderOutput().props.children).toEqual(0);
-      //   instance.increment.call(null);
-      //   expect(renderer.getRenderOutput().props.children).toEqual(1);
+      //   const barInstance = renderer.render(<Proxy />);
+      //   expect(barInstance.constructor.displayName).toEqual('Bar');
 
-      //   proxy.update(Counter10x);
-      //   instance.increment.call(null);
-      //   renderer.render(<Proxy />);
-      //   expect(renderer.getRenderOutput().props.children).toEqual(11);
+      //   proxy.update(Baz);
+      //   expect(barInstance.constructor.displayName).toEqual('Baz');
 
-      //   proxy.update(Counter100x);
-      //   instance.increment.call(null);
-      //   renderer.render(<Proxy />);
-      //   expect(renderer.getRenderOutput().props.children).toEqual(111);
+      //   proxy.update(Foo);
+      //   expect(barInstance.constructor.displayName).toEqual('Foo (Custom)');
+      // });
+
+      // it('keeps own methods on the prototype', () => {
+      //   let proxy = createProxy(Bar);
+      //   const Proxy = proxy.get();
+
+      //   const propertyNames = Object.getOwnPropertyNames(Proxy.prototype);
+      //   expect(propertyNames).toInclude('doNothing');
+      // });
+
+      // it('preserves enumerability and writability of methods', () => {
+      //   let proxy = createProxy(Bar);
+      //   const Proxy = proxy.get();
+
+      //   // removed componentDidMount
+      //   ['doNothing', 'render', 'componentWillUnmount'].forEach(name => {
+      //     const originalDescriptor = Object.getOwnPropertyDescriptor(Bar.prototype, name);
+      //     const proxyDescriptor = Object.getOwnPropertyDescriptor(Proxy.prototype, name);
+      //     if (originalDescriptor) {
+      //       expect(proxyDescriptor.enumerable).toEqual(originalDescriptor.enumerable, name);
+      //       expect(proxyDescriptor.writable).toEqual(originalDescriptor.writable, name);
+      //     } else {
+      //       expect(proxyDescriptor.enumerable).toEqual(false, name);
+      //       expect(proxyDescriptor.writable).toEqual(true, name);
+      //     }
+      //   });
+      // });
+
+      // it('preserves toString() of methods', () => {
+      //   let proxy = createProxy(Bar);
+
+      //   const Proxy = proxy.get();
+      //   ['doNothing', 'render', 'componentWillUnmount', 'constructor'].forEach(name => {
+      //     const originalMethod = Bar.prototype[name];
+      //     const proxyMethod = Proxy.prototype[name];
+      //     expect(originalMethod.toString()).toEqual(proxyMethod.toString());
+      //   });
+
+      //   // const doNothingBeforeItWasDeleted = Proxy.prototype.doNothing;
+      //   proxy.update(Baz);
+      //   ['render', 'componentWillUnmount', 'constructor'].forEach(name => {
+      //     const originalMethod = Baz.prototype[name];
+      //     const proxyMethod = Proxy.prototype[name];
+      //     expect(originalMethod.toString()).toEqual(proxyMethod.toString());
+      //   });
+      //   // expect(doNothingBeforeItWasDeleted).toEqual(undefined);
       // });
     });
   });
 
   // describe('classic only', () => {
-  //   const { Counter1x, Counter10x, Counter100x } = fixtures.classic;
+  //   const { Bar, Baz } = fixtures.classic;
 
-  //   /**
-  //    * Important in case it's a subscription that
-  //    * later needs to gets destroyed.
-  //    */
-  //   it('preserves the reference', () => {
-  //     const proxy = createProxy(Counter1x);
+  //   it('sets up legacy type property', () => {
+  //     let proxy = createProxy(Bar);
   //     const Proxy = proxy.get();
-  //     const instance = renderer.render(<Proxy />);
-  //     const savedIncrement = instance.increment;
+  //     const barInstance = renderer.render(<Proxy />);
 
-  //     proxy.update(Counter10x);
-  //     expect(instance.increment).toBe(savedIncrement);
+  //     warnSpy.destroy();
+  //     const localWarnSpy = expect.spyOn(console, 'warn');
+  //     expect(barInstance.constructor.type).toEqual(Proxy);
 
-  //     proxy.update(Counter100x);
-  //     expect(instance.increment).toBe(savedIncrement);
+  //     proxy.update(Baz);
+  //     const BazProxy = proxy.get();
+  //     expect(Proxy).toEqual(BazProxy);
+  //     expect(barInstance.constructor.type).toEqual(BazProxy);
+
+  //     // changed 1 to 2
+  //     expect(localWarnSpy.calls.length).toBe(2);
+  //     localWarnSpy.destroy();
   //   });
   // });
 
   // describe('modern only', () => {
-  //   const { Counter1x, Counter10x, Counter100x } = fixtures.modern;
+  //   const { Bar, Baz } = fixtures.modern;
 
-  //   /**
-  //    * There's nothing we can do here.
-  //    * You can't use a lazy autobind with hot reloading
-  //    * and expect function reference equality.
-  //    */
-  //   it('does not preserve the reference (known limitation)', () => {
-  //     const proxy = createProxy(Counter1x);
+  //   it('sets up the constructor name from initial name', () => {
+  //     let proxy = createProxy(Bar);
   //     const Proxy = proxy.get();
-  //     const instance = renderer.render(<Proxy />);
-  //     const savedIncrement = instance.increment;
+  //     expect(Proxy.name).toEqual('Bar');
 
-  //     proxy.update(Counter10x);
-  //     expect(instance.increment).toNotBe(savedIncrement);
 
-  //     proxy.update(Counter100x);
-  //     expect(instance.increment).toNotBe(savedIncrement);
+  //     // solved! Known limitation: name can't change
+  //     proxy.update(Baz);
+  //     expect(Proxy.name).toEqual('Baz');
+  //   });
+
+  //   it('should not crash if new Function() throws', () => {
+  //     let oldFunction = global.Function;
+  //     global.Function = function () { throw new Error(); }
+  //     try {
+  //       expect(() => {
+  //         const proxy = createProxy(Bar);
+  //         const Proxy = proxy.get();
+  //         const barInstance = renderer.render(<Proxy />);
+  //         expect(barInstance.constructor).toEqual(Proxy);
+  //       }).toNotThrow();
+  //     } finally {
+  //       global.Function = oldFunction;
+  //     }
   //   });
   // });
 });
