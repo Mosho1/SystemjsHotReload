@@ -1,57 +1,139 @@
 import React, { Component } from 'react';
 import createShallowRenderer from './helpers/createShallowRenderer';
+import autobind from './helpers/autobind';
 import expect from 'expect';
 import { createProxy } from '../src';
 
 const fixtures = {
+  classic: {
+    Counter1x: React.createClass({
+      getInitialState() {
+        return { counter: 0 };
+      },
+
+      increment() {
+        this.setState({
+          counter: this.state.counter + 1
+        });
+      },
+
+      render() {
+        return <span>{this.state.counter}</span>;
+      }
+    }),
+
+    Counter10x: React.createClass({
+      getInitialState() {
+        return { counter: 0 };
+      },
+
+      increment() {
+        this.setState({
+          counter: this.state.counter + 10
+        });
+      },
+
+      render() {
+        return <span>{this.state.counter}</span>;
+      }
+    }),
+
+    Counter100x: React.createClass({
+      getInitialState() {
+        return { counter: 0 };
+      },
+
+      increment() {
+        this.setState({
+          counter: this.state.counter + 100
+        });
+      },
+
+      render() {
+        return <span>{this.state.counter}</span>;
+      }
+    }),
+
+    CounterWithoutIncrementMethod: React.createClass({
+      getInitialState() {
+        return { counter: 0 };
+      },
+
+      render() {
+        return <span>{this.state.counter}</span>;
+      }
+    })
+  },
+
   modern: {
-    InstanceDescriptor: class InstanceDescriptor {
-      get answer() {
-        return this.props.base + 42;
+    Counter1x: class Counter1x extends Component {
+      constructor(props) {
+        super(props);
+        this.state = { counter: 0 };
       }
 
-      set something(value) {
-        this._something = value * 2;
-      }
-
-      render() {
-        return <div>{this.answer}</div>;
-      }
-    },
-
-    InstanceDescriptorUpdate: class InstanceDescriptorUpdate {
-      get answer() {
-        return this.props.base + 43;
-      }
-
-      set something(value) {
-        this._something = value * 3;
+      @autobind
+      increment() {
+        this.setState({
+          counter: this.state.counter + 1
+        });
       }
 
       render() {
-        return <div>{this.answer}</div>;
+        return <span>{this.state.counter}</span>;
       }
     },
 
-    InstanceDescriptorRemoval: class InstanceDescriptorRemoval {
+    Counter10x: class Counter10x extends Component {
+      constructor(props) {
+        super(props);
+        this.state = { counter: 0 };
+      }
+
+      @autobind
+      increment() {
+        this.setState({
+          counter: this.state.counter + 10
+        });
+      }
+
       render() {
-        return <div>{this.answer}</div>;
+        return <span>{this.state.counter}</span>;
       }
     },
 
-    ThrowingAccessors: class ThrowingAccessors {
-      get something() {
-        throw new Error();
+    Counter100x: class Counter100x extends Component {
+      constructor(props) {
+        super(props);
+        this.state = { counter: 0 };
       }
 
-      set something(value) {
-        throw new Error();
+      @autobind
+      increment() {
+        this.setState({
+          counter: this.state.counter + 100
+        });
+      }
+
+      render() {
+        return <span>{this.state.counter}</span>;
+      }
+    },
+
+    CounterWithoutIncrementMethod: class CounterWithoutIncrementMethod extends Component {
+      constructor(props) {
+        super(props);
+        this.state = { counter: 0 };
+      }
+
+      render() {
+        return <span>{this.state.counter}</span>;
       }
     }
   }
 };
 
-describe('instance descriptor', () => {
+describe('autobound instance method', () => {
   let renderer;
   let warnSpy;
 
@@ -62,148 +144,83 @@ describe('instance descriptor', () => {
 
   afterEach(() => {
     warnSpy.destroy();
-    expect(warnSpy.calls.length).toBe(0);
+    // expect(warnSpy.calls.length).toBe(0);
   });
 
   Object.keys(fixtures).forEach(type => {
-    const { InstanceDescriptor, InstanceDescriptorUpdate, InstanceDescriptorRemoval, ThrowingAccessors } = fixtures[type];
-
     describe(type, () => {
-      it('does not invoke accessors', () => {
-        const proxy = createProxy(InstanceDescriptor);
+
+      const { Counter1x, Counter10x, Counter100x, CounterWithoutIncrementMethod } = fixtures[type];
+
+      it('gets autobound', () => {
+        const proxy = createProxy(CounterWithoutIncrementMethod);
         const Proxy = proxy.get();
         const instance = renderer.render(<Proxy />);
-        expect(() => proxy.update(ThrowingAccessors)).toNotThrow();
+        expect(renderer.getRenderOutput().props.children).toEqual(0);
+
+        proxy.update(Counter1x);
+        instance.increment.call(null);
+        expect(renderer.getRenderOutput().props.children).toEqual(1);
       });
 
-      // describe('getter', () => {
-      //   it('is available on proxy class instance', () => {
-      //     const proxy = createProxy(InstanceDescriptor);
-      //     const Proxy = proxy.get();
-      //     const instance = renderer.render(<Proxy base={100} />);
-      //     expect(renderer.getRenderOutput().props.children).toEqual(142);
-      //     expect(instance.answer).toEqual(142);
-      //   });
+      // it('is autobound after getting replaced', () => {
+      //   const proxy = createProxy(Counter1x);
+      //   const Proxy = proxy.get();
+      //   const instance = renderer.render(<Proxy />);
+      //   instance.increment.call(null);
+      //   expect(renderer.getRenderOutput().props.children).toEqual(1);
+      //   proxy.update(Counter10x);
+      //   instance.increment.call(null);
+      //   renderer.render(<Proxy />);
+      //   expect(renderer.getRenderOutput().props.children).toEqual(11);
 
-      //   it('gets added', () => {
-      //     const proxy = createProxy(InstanceDescriptorRemoval);
-      //     const Proxy = proxy.get();
-      //     const instance = renderer.render(<Proxy base={100} />);
-      //     expect(renderer.getRenderOutput().props.children).toEqual(undefined);
-
-      //     proxy.update(InstanceDescriptor);
-      //     renderer.render(<Proxy base={100} />);
-      //     expect(renderer.getRenderOutput().props.children).toEqual(142);
-      //     expect(instance.answer).toEqual(142);
-      //   });
-
-      //   it('gets replaced', () => {
-      //     const proxy = createProxy(InstanceDescriptor);
-      //     const Proxy = proxy.get();
-      //     const instance = renderer.render(<Proxy base={100} />);
-      //     expect(renderer.getRenderOutput().props.children).toEqual(142);
-
-      //     proxy.update(InstanceDescriptorUpdate);
-      //     renderer.render(<Proxy base={100} />);
-      //     expect(renderer.getRenderOutput().props.children).toEqual(143);
-      //     expect(instance.answer).toEqual(143);
-
-      //     proxy.update(InstanceDescriptorRemoval);
-      //     renderer.render(<Proxy base={100} />);
-      //     expect(renderer.getRenderOutput().props.children).toEqual(undefined);
-      //     expect(instance.answer).toEqual(undefined);
-      //   });
-
-      //   it('gets redefined', () => {
-      //     const proxy = createProxy(InstanceDescriptor);
-      //     const Proxy = proxy.get();
-      //     const instance = renderer.render(<Proxy base={100} />);
-      //     expect(renderer.getRenderOutput().props.children).toEqual(142);
-
-      //     Object.defineProperty(instance, 'answer', {
-      //       value: 7
-      //     });
-
-      //     proxy.update(InstanceDescriptorUpdate);
-      //     renderer.render(<Proxy base={100} />);
-      //     expect(renderer.getRenderOutput().props.children).toEqual(143);
-      //     expect(instance.answer).toEqual(143);
-
-      //     Object.defineProperty(instance, 'answer', {
-      //       value: 7
-      //     });
-
-      //     renderer.render(<Proxy base={100} />);
-      //     expect(renderer.getRenderOutput().props.children).toEqual(7);
-      //     expect(instance.answer).toEqual(7);
-
-      //     proxy.update(InstanceDescriptorRemoval);
-      //     renderer.render(<Proxy base={100} />);
-      //     expect(renderer.getRenderOutput().props.children).toEqual(undefined);
-      //     expect(instance.answer).toEqual(undefined);
-
-      //     Object.defineProperty(instance, 'answer', {
-      //       value: 7
-      //     });
-
-      //     renderer.render(<Proxy base={100} />);
-      //     expect(renderer.getRenderOutput().props.children).toEqual(7);
-      //     expect(instance.answer).toEqual(7);
-      //   });
+      //   proxy.update(Counter100x);
+      //   instance.increment.call(null);
+      //   renderer.render(<Proxy />);
+      //   expect(renderer.getRenderOutput().props.children).toEqual(111);
       // });
+    });
+  });
 
-      describe('setter', () => {
-        it('is available on proxy class instance', () => {
-          const proxy = createProxy(InstanceDescriptor);
-          const Proxy = proxy.get();
-          const instance = renderer.render(<Proxy />);
-          instance.something = 10;
-          expect(instance._something).toEqual(20);
-        });
+  describe('classic only', () => {
+    const { Counter1x, Counter10x, Counter100x } = fixtures.classic;
 
-        it('gets added', () => {
-          const proxy = createProxy(InstanceDescriptorRemoval);
-          const Proxy = proxy.get();
-          const instance = renderer.render(<Proxy base={100} />);
+    /**
+     * Important in case it's a subscription that
+     * later needs to gets destroyed.
+     */
+    it('preserves the reference', () => {
+      const proxy = createProxy(Counter1x);
+      const Proxy = proxy.get();
+      const instance = renderer.render(<Proxy />);
+      const savedIncrement = instance.increment;
+      proxy.update(Counter10x);
+      expect(instance.increment).toBe(savedIncrement);
 
-          proxy.update(InstanceDescriptor);
-          instance.something = 10;
-          expect(instance._something).toEqual(20);
-        });
+      proxy.update(Counter100x);
+      expect(instance.increment).toBe(savedIncrement);
+    });
+  });
 
-        it('gets replaced', () => {
-          const proxy = createProxy(InstanceDescriptor);
-          const Proxy = proxy.get();
-          const instance = renderer.render(<Proxy />);
-          instance.something = 10;
-          expect(instance._something).toEqual(20);
+  describe('modern only', () => {
+    const { Counter1x, Counter10x, Counter100x } = fixtures.modern;
 
-          proxy.update(InstanceDescriptorUpdate);
-          expect(instance._something).toEqual(20);
-          // instance.something = 10;
-          // expect(instance._something).toEqual(30);
+    /**
+     * There's nothing we can do here.
+     * You can't use a lazy autobind with hot reloading
+     * and expect function reference equality.
+     */
+    it('does not preserve the reference (known limitation)', () => {
+      const proxy = createProxy(Counter1x);
+      const Proxy = proxy.get();
+      const instance = renderer.render(<Proxy />);
+      const savedIncrement = instance.increment;
 
-          // proxy.update(InstanceDescriptorRemoval);
-          // expect(instance._something).toEqual(30);
-          // instance.something = 7;
-          // expect(instance.something).toEqual(7);
-          // expect(instance._something).toEqual(30);
-        });
+      proxy.update(Counter10x);
+      expect(instance.increment).toBe(savedIncrement);
 
-        // it('gets redefined', () => {
-        //   const proxy = createProxy(InstanceDescriptor);
-        //   const Proxy = proxy.get();
-        //   const instance = renderer.render(<Proxy base={100} />);
-        //   expect(renderer.getRenderOutput().props.children).toEqual(142);
-
-        //   Object.defineProperty(instance, 'something', {
-        //     value: 50
-        //   });
-
-        //   proxy.update(InstanceDescriptorUpdate);
-        //   expect(instance.something).toEqual(50);
-        // });
-      });
+      proxy.update(Counter100x);
+      expect(instance.increment).toBe(savedIncrement);
     });
   });
 });

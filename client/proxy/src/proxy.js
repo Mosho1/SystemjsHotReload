@@ -1,7 +1,7 @@
 import {cloneInto} from './utils';
 import autobind from 'autobind-decorator';
-import {bindAutoBindMethod} from './bindAutoBindMethods';
-import deleteUnknownAutoBindMethods from './deleteUnknownAutoBindMethods';
+// import {bindAutoBindMethod} from './bindAutoBindMethods';
+// import deleteUnknownAutoBindMethods from './deleteUnknownAutoBindMethods';
 import React from 'react';
 
 const noop = x => x;
@@ -18,9 +18,13 @@ const propDefaults = {
 	writable: true
 };
 
+const getProp = (obj, prop) => obj && obj[prop];
+
 const propCache = Symbol('propCache');
 const constructor = Symbol('constructor');
 const reactProxy = Symbol('reactProxy');
+
+const defineProxyProp = (obj, desc) => Object.defineProperty(obj, reactProxy, desc || {value: true});
 
 
 const flattenPrototypes = (obj, exclude) => {
@@ -41,36 +45,63 @@ const flattenPrototypes = (obj, exclude) => {
 	}, obj);
 };
 
+// const curry = (fn, boundArgs) => (...args) => {
+// 	args = boundArgs.concat(args);
+// 	return fn(...args);
+// };
+
 const controlledObject = (object, instance) => {
+
+	if (!instance.hasOwnProperty(propCache)) {
+		Object.defineProperty(instance, propCache, {
+			value: {}
+		});
+	}
+
 	ownKeys(object).forEach(k => {
 		const prop = instance[propCache][k] = Object.getOwnPropertyDescriptor(object, k);
 		if (!prop.configurable) {
 			return;
 		}
+
+		const getter = function() {
+
+			let {value, get} = prop;
+
+			if (!value && get) {
+				value = get && get.call(this);
+			}
+
+			if (typeof value === 'function') {
+				prop.bound = prop.bound || ((...args) => value.apply(instance, args));
+				Object.defineProperty(prop.bound, reactProxy, {value: true});
+				prop.bound.bind = (...args) => {
+					const bound = Function.prototype.bind.call(prop.bound, null, ...args);
+					defineProxyProp(bound);
+					return bound;
+				};
+				return prop.bound;
+			}
+
+			return value;
+		};
+
+
+		const setter = function(v) {
+			prop.wasSet = true;
+			prop.value = prop.set
+				? prop.set.call(this, v)
+				: v;
+		};
+
+		defineProxyProp(getter);
+		defineProxyProp(setter);
+
 		Object.defineProperty(object, k, {
 			configurable: true,
 			enumerable: true,
-			get() {
-				const {value, get} = prop;
-				if (value) {
-					if (typeof value === 'function') {
-						prop.bound = prop.bound || ((...args) => value.apply(instance, args));
-						return prop.bound;
-					} else {
-						return value;
-					}
-				} else {
-					return get && get.call(this);
-				}
-			},
-			set(v) {
-				prop.wasSet = true;
-				if (prop.set) {
-					prop.value = prop.set.call(this, v);
-				} else {
-					prop.value = v;
-				}
-			}
+			get: getter,
+			set: setter
 		});
 
 	});
@@ -78,10 +109,6 @@ const controlledObject = (object, instance) => {
 
 const deleteFromControlledOnbject = (controlled, k) => {
 	const prop = controlled[propCache][k];
-	// if (!prop || !prop.controlled) {
-	// 	console.log(k)
-	// 	return;
-	// }
 	if (prop && prop.bound) {
 		prop.bound.call = noop;
 		prop.bound.apply = noop;
@@ -113,8 +140,7 @@ export class Proxy {
 
 		this.update(Component);
 
-		Object.defineProperty(this.proxied, reactProxy, {value: this});
-
+		defineProxyProp(this.proxied, {value: this});
 	}
 
 	updateInstance(instance = {}, Component = this[constructor]) {
@@ -123,19 +149,11 @@ export class Proxy {
 		const newInstance = new Component(instance.props);
 		if (newInstance.componentWillMount) {
 			newInstance.componentWillMount();
-			// console.log(newInstance)
 		}
 
 		const exclude = objectProtoKeys.concat(deprecated);
 
-
 		const flattened = flattenPrototypes(newInstance, exclude);
-
-		if (!instance.hasOwnProperty(propCache)) {
-			Object.defineProperty(instance, propCache, {
-				value: {}
-			});
-		}
 
 		const componentWillMount = flattened.componentWillMount || noop;
 		const componentWillUnmount = flattened.componentWillUnmount || noop;
@@ -156,9 +174,20 @@ export class Proxy {
 		Object.setPrototypeOf(flattened, {});
 
 		flattened.state = instance.state || flattened.state || {};
+		flattened.props = instance.props || flattened.props || {};
+		flattened.context = instance.context || flattened.context || {};
+
+		// for instance-descriptor tests, don't delete properties which aren't on the prototype of the Component.
+		const namesToExclude = Object.keys(instance).filter(k => {
+			const {get, set, value} = Object.getOwnPropertyDescriptor(instance, k);
+			// if (k === 'increment') console.log(value)
+			const hasProxySymbol = [get, set, value].some(x => getProp(x, reactProxy));
+			return !hasProxySymbol;
+		});
+
 
 		cloneInto(instance, flattened, {
-			exclude: internals,
+			exclude: internals.concat(namesToExclude),
 			noDelete: true,
 			enumerableOnly: true,
 			onDelete(k, target) {
@@ -172,9 +201,8 @@ export class Proxy {
 
 	update(Component) {
 		const {instances} = this;
-		this[constructor] = Component;
-
 		instances.forEach(instance => this.updateInstance(instance, Component));
+		this[constructor] = Component;
 		cloneInto(this.proxied.prototype, Component.prototype);
 		this.proxied.prototype.constructor = this.proxied;
 	}
