@@ -4,7 +4,8 @@
   "description": "Proxies React components without unmounting or losing their state.",
   "main": "modules/index.js",
   "scripts": {
-    "test": "mocha --compilers js:babel/register ./test --watch"
+    "test": "mocha --compilers js:babel/register ./test/atest.js --watch",
+    "regtest": "mocha --compilers js:babel/register ./test"
   },
   "repository": {
     "type": "git",

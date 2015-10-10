@@ -10,7 +10,7 @@
  * https://github.com/facebook/react/blob/6508b1ad273a6f371e8d90ae676e5390199461b4/src/isomorphic/classic/class/ReactClass.js#L650-L713
  */
 
-function bindAutoBindMethod(component, method) {
+export function bindAutoBindMethod(component, method) {
   var boundMethod = method.bind(component);
 
   boundMethod.__reactBoundContext = component;

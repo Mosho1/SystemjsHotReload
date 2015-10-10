@@ -25,9 +25,7 @@ export const cloneInto = (target, source, {exclude = [], noDelete = false, enume
 		}
 		if (sourceDescriptor
 			&& (!targetDescriptor || targetDescriptor.configurable)
-
 			) {
-
 			Object.defineProperty(target, k, sourceDescriptor);
 		}
 	});

@@ -5,81 +5,53 @@ import { createProxy } from '../src';
 
 const fixtures = {
   modern: {
-    Bar: class Bar {
-      componentWillUnmount() {
-        this.didUnmount = true;
+    InstanceDescriptor: class InstanceDescriptor {
+      get answer() {
+        return this.props.base + 42;
       }
 
-      doNothing() {
+      set something(value) {
+        this._something = value * 2;
       }
 
       render() {
-        return <div>Bar</div>;
+        return <div>{this.answer}</div>;
       }
     },
 
-    Baz: class Baz {
-      componentWillUnmount() {
-        this.didUnmount = true;
+    InstanceDescriptorUpdate: class InstanceDescriptorUpdate {
+      get answer() {
+        return this.props.base + 43;
+      }
+
+      set something(value) {
+        this._something = value * 3;
       }
 
       render() {
-        return <div>Baz</div>;
+        return <div>{this.answer}</div>;
       }
     },
 
-    Foo: class Foo {
-      static displayName = 'Foo (Custom)';
+    InstanceDescriptorRemoval: class InstanceDescriptorRemoval {
+      render() {
+        return <div>{this.answer}</div>;
+      }
+    },
 
-      componentWillUnmount() {
-        this.didUnmount = true;
+    ThrowingAccessors: class ThrowingAccessors {
+      get something() {
+        throw new Error();
       }
 
-      render() {
-        return <div>Foo</div>;
+      set something(value) {
+        throw new Error();
       }
     }
-  },
-
-  classic: {
-    Bar: React.createClass({
-      componentWillUnmount() {
-        this.didUnmount = true;
-      },
-
-      doNothing() {
-      },
-
-      render() {
-        return <div>Bar</div>;
-      }
-    }),
-
-    Baz: React.createClass({
-      componentWillUnmount() {
-        this.didUnmount = true;
-      },
-
-      render() {
-        return <div>Baz</div>;
-      }
-    }),
-
-    Foo: React.createClass({
-      displayName: 'Foo (Custom)',
-
-      componentWillUnmount() {
-        this.didUnmount = true;
-      },
-
-      render() {
-        return <div>Foo</div>;
-      }
-    })
   }
 };
 
-describe('consistency', () => {
+describe('instance descriptor', () => {
   let renderer;
   let warnSpy;
 
@@ -94,174 +66,144 @@ describe('consistency', () => {
   });
 
   Object.keys(fixtures).forEach(type => {
+    const { InstanceDescriptor, InstanceDescriptorUpdate, InstanceDescriptorRemoval, ThrowingAccessors } = fixtures[type];
+
     describe(type, () => {
-      const { Bar, Baz, Foo } = fixtures[type];
-
-      it('does not overwrite the original class', () => {
-        const proxy = createProxy(Bar);
+      it('does not invoke accessors', () => {
+        const proxy = createProxy(InstanceDescriptor);
         const Proxy = proxy.get();
-        const barInstance = renderer.render(<Proxy />);
-        expect(renderer.getRenderOutput().props.children).toEqual('Bar');
-
-        proxy.update(Baz);
-        const realBarInstance = renderer.render(<Bar />);
-        expect(renderer.getRenderOutput().props.children).toEqual('Bar');
-        expect(barInstance).toNotEqual(realBarInstance);
-        expect(barInstance.didUnmount).toEqual(true);
+        const instance = renderer.render(<Proxy />);
+        expect(() => proxy.update(ThrowingAccessors)).toNotThrow();
       });
 
-      it('returns an existing proxy when wrapped twice', () => {
-        const proxy = createProxy(Bar);
-        const Proxy = proxy.get();
-        const proxyTwice = createProxy(Proxy);
+      // describe('getter', () => {
+      //   it('is available on proxy class instance', () => {
+      //     const proxy = createProxy(InstanceDescriptor);
+      //     const Proxy = proxy.get();
+      //     const instance = renderer.render(<Proxy base={100} />);
+      //     expect(renderer.getRenderOutput().props.children).toEqual(142);
+      //     expect(instance.answer).toEqual(142);
+      //   });
 
-        console.log(proxyTwice === proxy)
-        expect(proxyTwice).toBe(proxy);
-      });
+      //   it('gets added', () => {
+      //     const proxy = createProxy(InstanceDescriptorRemoval);
+      //     const Proxy = proxy.get();
+      //     const instance = renderer.render(<Proxy base={100} />);
+      //     expect(renderer.getRenderOutput().props.children).toEqual(undefined);
 
-      it('prevents recursive proxy cycle', () => {
-        const proxy = createProxy(Bar);
-        const Proxy = proxy.get();
-        proxy.update(Proxy);
-        expect(proxy.get()).toEqual(Proxy);
-      });
+      //     proxy.update(InstanceDescriptor);
+      //     renderer.render(<Proxy base={100} />);
+      //     expect(renderer.getRenderOutput().props.children).toEqual(142);
+      //     expect(instance.answer).toEqual(142);
+      //   });
 
-      // it('prevents mutually recursive proxy cycle', () => {
-      //   const barProxy = createProxy(Bar);
-      //   const BarProxy = barProxy.get();
+      //   it('gets replaced', () => {
+      //     const proxy = createProxy(InstanceDescriptor);
+      //     const Proxy = proxy.get();
+      //     const instance = renderer.render(<Proxy base={100} />);
+      //     expect(renderer.getRenderOutput().props.children).toEqual(142);
 
-      //   const fooProxy = createProxy(Foo);
-      //   const FooProxy = fooProxy.get();
+      //     proxy.update(InstanceDescriptorUpdate);
+      //     renderer.render(<Proxy base={100} />);
+      //     expect(renderer.getRenderOutput().props.children).toEqual(143);
+      //     expect(instance.answer).toEqual(143);
 
-      //   barProxy.update(FooProxy);
-      //   fooProxy.update(BarProxy);
-      // });
+      //     proxy.update(InstanceDescriptorRemoval);
+      //     renderer.render(<Proxy base={100} />);
+      //     expect(renderer.getRenderOutput().props.children).toEqual(undefined);
+      //     expect(instance.answer).toEqual(undefined);
+      //   });
 
-      // it('sets up constructor to match the type', () => {
-      //   let proxy = createProxy(Bar);
-      //   const BarProxy = proxy.get();
-      //   const barInstance = renderer.render(<BarProxy />);
-      //   expect(barInstance.constructor).toEqual(BarProxy);
-      //   // expect(barInstance instanceof BarProxy).toEqual(true);
+      //   it('gets redefined', () => {
+      //     const proxy = createProxy(InstanceDescriptor);
+      //     const Proxy = proxy.get();
+      //     const instance = renderer.render(<Proxy base={100} />);
+      //     expect(renderer.getRenderOutput().props.children).toEqual(142);
 
-      //   proxy.update(Baz);
-      //   const BazProxy = proxy.get();
-      //   expect(BarProxy).toEqual(BazProxy);
-      //   expect(barInstance.constructor).toEqual(BazProxy);
-      //   // expect(barInstance instanceof BazProxy).toEqual(true);
-      // });
+      //     Object.defineProperty(instance, 'answer', {
+      //       value: 7
+      //     });
 
-      // it('sets up displayName from displayName or name', () => {
-      //   let proxy = createProxy(Bar);
-      //   const Proxy = proxy.get();
-      //   const barInstance = renderer.render(<Proxy />);
-      //   expect(barInstance.constructor.displayName).toEqual('Bar');
+      //     proxy.update(InstanceDescriptorUpdate);
+      //     renderer.render(<Proxy base={100} />);
+      //     expect(renderer.getRenderOutput().props.children).toEqual(143);
+      //     expect(instance.answer).toEqual(143);
 
-      //   proxy.update(Baz);
-      //   expect(barInstance.constructor.displayName).toEqual('Baz');
+      //     Object.defineProperty(instance, 'answer', {
+      //       value: 7
+      //     });
 
-      //   proxy.update(Foo);
-      //   expect(barInstance.constructor.displayName).toEqual('Foo (Custom)');
-      // });
+      //     renderer.render(<Proxy base={100} />);
+      //     expect(renderer.getRenderOutput().props.children).toEqual(7);
+      //     expect(instance.answer).toEqual(7);
 
-      // it('keeps own methods on the prototype', () => {
-      //   let proxy = createProxy(Bar);
-      //   const Proxy = proxy.get();
+      //     proxy.update(InstanceDescriptorRemoval);
+      //     renderer.render(<Proxy base={100} />);
+      //     expect(renderer.getRenderOutput().props.children).toEqual(undefined);
+      //     expect(instance.answer).toEqual(undefined);
 
-      //   const propertyNames = Object.getOwnPropertyNames(Proxy.prototype);
-      //   expect(propertyNames).toInclude('doNothing');
-      // });
+      //     Object.defineProperty(instance, 'answer', {
+      //       value: 7
+      //     });
 
-      // it('preserves enumerability and writability of methods', () => {
-      //   let proxy = createProxy(Bar);
-      //   const Proxy = proxy.get();
-
-      //   // removed componentDidMount
-      //   ['doNothing', 'render', 'componentWillUnmount'].forEach(name => {
-      //     const originalDescriptor = Object.getOwnPropertyDescriptor(Bar.prototype, name);
-      //     const proxyDescriptor = Object.getOwnPropertyDescriptor(Proxy.prototype, name);
-      //     if (originalDescriptor) {
-      //       expect(proxyDescriptor.enumerable).toEqual(originalDescriptor.enumerable, name);
-      //       expect(proxyDescriptor.writable).toEqual(originalDescriptor.writable, name);
-      //     } else {
-      //       expect(proxyDescriptor.enumerable).toEqual(false, name);
-      //       expect(proxyDescriptor.writable).toEqual(true, name);
-      //     }
+      //     renderer.render(<Proxy base={100} />);
+      //     expect(renderer.getRenderOutput().props.children).toEqual(7);
+      //     expect(instance.answer).toEqual(7);
       //   });
       // });
 
-      // it('preserves toString() of methods', () => {
-      //   let proxy = createProxy(Bar);
+      describe('setter', () => {
+        it('is available on proxy class instance', () => {
+          const proxy = createProxy(InstanceDescriptor);
+          const Proxy = proxy.get();
+          const instance = renderer.render(<Proxy />);
+          instance.something = 10;
+          expect(instance._something).toEqual(20);
+        });
 
-      //   const Proxy = proxy.get();
-      //   ['doNothing', 'render', 'componentWillUnmount', 'constructor'].forEach(name => {
-      //     const originalMethod = Bar.prototype[name];
-      //     const proxyMethod = Proxy.prototype[name];
-      //     expect(originalMethod.toString()).toEqual(proxyMethod.toString());
-      //   });
+        it('gets added', () => {
+          const proxy = createProxy(InstanceDescriptorRemoval);
+          const Proxy = proxy.get();
+          const instance = renderer.render(<Proxy base={100} />);
 
-      //   // const doNothingBeforeItWasDeleted = Proxy.prototype.doNothing;
-      //   proxy.update(Baz);
-      //   ['render', 'componentWillUnmount', 'constructor'].forEach(name => {
-      //     const originalMethod = Baz.prototype[name];
-      //     const proxyMethod = Proxy.prototype[name];
-      //     expect(originalMethod.toString()).toEqual(proxyMethod.toString());
-      //   });
-      //   // expect(doNothingBeforeItWasDeleted).toEqual(undefined);
-      // });
+          proxy.update(InstanceDescriptor);
+          instance.something = 10;
+          expect(instance._something).toEqual(20);
+        });
+
+        it('gets replaced', () => {
+          const proxy = createProxy(InstanceDescriptor);
+          const Proxy = proxy.get();
+          const instance = renderer.render(<Proxy />);
+          instance.something = 10;
+          expect(instance._something).toEqual(20);
+
+          proxy.update(InstanceDescriptorUpdate);
+          expect(instance._something).toEqual(20);
+          // instance.something = 10;
+          // expect(instance._something).toEqual(30);
+
+          // proxy.update(InstanceDescriptorRemoval);
+          // expect(instance._something).toEqual(30);
+          // instance.something = 7;
+          // expect(instance.something).toEqual(7);
+          // expect(instance._something).toEqual(30);
+        });
+
+        // it('gets redefined', () => {
+        //   const proxy = createProxy(InstanceDescriptor);
+        //   const Proxy = proxy.get();
+        //   const instance = renderer.render(<Proxy base={100} />);
+        //   expect(renderer.getRenderOutput().props.children).toEqual(142);
+
+        //   Object.defineProperty(instance, 'something', {
+        //     value: 50
+        //   });
+
+        //   proxy.update(InstanceDescriptorUpdate);
+        //   expect(instance.something).toEqual(50);
+        // });
+      });
     });
   });
-
-  // describe('classic only', () => {
-  //   const { Bar, Baz } = fixtures.classic;
-
-  //   it('sets up legacy type property', () => {
-  //     let proxy = createProxy(Bar);
-  //     const Proxy = proxy.get();
-  //     const barInstance = renderer.render(<Proxy />);
-
-  //     warnSpy.destroy();
-  //     const localWarnSpy = expect.spyOn(console, 'warn');
-  //     expect(barInstance.constructor.type).toEqual(Proxy);
-
-  //     proxy.update(Baz);
-  //     const BazProxy = proxy.get();
-  //     expect(Proxy).toEqual(BazProxy);
-  //     expect(barInstance.constructor.type).toEqual(BazProxy);
-
-  //     // changed 1 to 2
-  //     expect(localWarnSpy.calls.length).toBe(2);
-  //     localWarnSpy.destroy();
-  //   });
-  // });
-
-  // describe('modern only', () => {
-  //   const { Bar, Baz } = fixtures.modern;
-
-  //   it('sets up the constructor name from initial name', () => {
-  //     let proxy = createProxy(Bar);
-  //     const Proxy = proxy.get();
-  //     expect(Proxy.name).toEqual('Bar');
-
-
-  //     // solved! Known limitation: name can't change
-  //     proxy.update(Baz);
-  //     expect(Proxy.name).toEqual('Baz');
-  //   });
-
-  //   it('should not crash if new Function() throws', () => {
-  //     let oldFunction = global.Function;
-  //     global.Function = function () { throw new Error(); }
-  //     try {
-  //       expect(() => {
-  //         const proxy = createProxy(Bar);
-  //         const Proxy = proxy.get();
-  //         const barInstance = renderer.render(<Proxy />);
-  //         expect(barInstance.constructor).toEqual(Proxy);
-  //       }).toNotThrow();
-  //     } finally {
-  //       global.Function = oldFunction;
-  //     }
-  //   });
-  // });
 });
