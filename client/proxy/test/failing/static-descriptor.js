@@ -160,8 +160,6 @@ describe('static descriptor', () => {
         //     value: 50
         //   });
 
-        //   console.log('wat',instance.constructor.something)
-
         //   proxy.update(StaticDescriptorUpdate);
         //   expect(instance.constructor.something).toEqual(50);
         // });

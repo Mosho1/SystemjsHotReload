@@ -95,9 +95,11 @@ describe('static descriptor', () => {
       const Proxy = proxy.get();
       const instance = renderer.render(<Proxy />);
       expect(renderer.getRenderOutput().props.children).toEqual(42);
-      Object.defineProperty(instance.constructor, 'answer', {
-        value: 7
-      });
+      // Object.defineProperty(instance.constructor, 'answer', {
+        // value: 7
+      // });
+
+    instance.constructor.answer = 7;
 
       proxy.update(StaticDescriptorUpdate);
 
@@ -159,8 +161,6 @@ describe('static descriptor', () => {
         //   Object.defineProperty(instance.constructor, 'something', {
         //     value: 50
         //   });
-
-        //   console.log('wat',instance.constructor.something)
 
         //   proxy.update(StaticDescriptorUpdate);
         //   expect(instance.constructor.something).toEqual(50);

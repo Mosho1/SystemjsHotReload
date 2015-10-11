@@ -61,7 +61,6 @@ function boundClass(target) {
  * and memoize the result against a symbol on the instance
  */
 function boundMethod(target, key, descriptor) {
-  console.log(target.constructor)
   let fn = descriptor.value;
 
   if (typeof fn !== 'function') {

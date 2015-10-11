@@ -7,7 +7,6 @@ import React from 'react';
 const noop = x => x;
 const ownKeys = obj => Object.getOwnPropertyNames(obj).concat(Object.getOwnPropertySymbols(obj));
 const getDescriptor = Object.getOwnPropertyDescriptor;
-const defProp = Object.defineProperty;
 
 const objectProtoKeys = ownKeys(Object.getPrototypeOf({}));
 // const deprecated = ['getDOMNode', 'isMounted', 'replaceProps', 'replaceState', 'setProps'];
@@ -27,14 +26,21 @@ const constructor = Symbol('constructor');
 const reactProxy = Symbol('reactProxy');
 const originalFn = Symbol('original unbound fn');
 
-const defineProxyProp = (obj, desc) => defProp(obj, reactProxy, desc || {value: true});
-
 const protoBind = Function.prototype.bind;
 Function.prototype.bind = function(...args) {
 	const bound = protoBind.apply(this, args);
 	bound[originalFn] = this;
 	return bound;
 };
+
+const defProp = Object.defineProperty;
+Object.defineProperty = (context, key, descriptor) => {
+	context[propCache] = context[propCache] || {};
+	context[propCache][key] = {dirty: true};
+	return defProp(context, key, descriptor);
+};
+
+const defineProxyProp = (obj, desc) => defProp(obj, reactProxy, desc || {value: true});
 
 const flattenPrototypes = (obj, exclude) => {
 	const proto = Object.getPrototypeOf(obj);
@@ -87,7 +93,6 @@ const controlledObject = (object, instance) => {
 				let isAutobind;
 				Object.defineProperty = (context, key, descriptor) => {
 					if (context === this && key === k) {
-						console.log(k)
 						isAutobind = true;
 					} else {
 						return defineProperty(context, key, descriptor);
@@ -113,10 +118,6 @@ const controlledObject = (object, instance) => {
 
 					cachedProp.bound.bind = (...args) => {
 						return cachedProp.bound;
-						// console.log(args)
-						// const bound = Function.prototype.bind.call(cachedProp.bound, null, ...args.slice(1));
-						// defineProxyProp(bound);
-						// return bound;
 					};
 				}
 				return cachedProp.bound;
@@ -143,8 +144,6 @@ const controlledObject = (object, instance) => {
 			get: cachedProp.getter,
 			set: cachedProp.setter
 		});
-
-		// if(k==='increment') console.log(object[k])
 
 	});
 };
@@ -253,53 +252,57 @@ export class Proxy {
 		instances.forEach(instance => this.updateInstance(instance, Component));
 		this[constructor] = Component;
 		cloneInto(this.proxied.prototype, Component.prototype);
-		console.log(this.proxied.answer, Component.answer)
 		cloneInto(this.proxied, Component, {
 			exclude: ['type', propCache],
 			// enumerableOnly: true,
 			shouldDefine: (k, target) => {
-				const desc = getDescriptor(target, k);
-				if (desc.dirty || !desc[reactProxy]) {
+				const cache = target[propCache][k];
+				if (cache && cache.dirty) {
 					return false;
 				}
 			},
 			shouldDelete: (k, target) => {
-				const desc = getDescriptor(target, k);
-				if (desc.dirty || !desc[reactProxy]) {
+				const cache = target[propCache][k];
+				if (cache && cache.dirty) {
 					return false;
 				}
 			}
 		});
-		if (!this.proxied.hasOwnProperty(propCache)) {
-			defProp(this.proxied, propCache, {
-				value: {},
-				configurable: true
-			});
-		}
-
 		ownKeys(this.proxied).forEach(k => {
 			const descriptor = getDescriptor(this.proxied, k);
-			descriptor[reactProxy] = true;
-			if (!descriptor.configurable) return;
-			const {get: oldGet, set: oldSet} = descriptor;
-			const get = oldGet
-				? function() {
-					return oldGet.call(this);
-				}
-				: function() {
-					return descriptor.value;
-				};
 
-			const set = oldGet
+			if (!descriptor.configurable || k === propCache) {
+				return;
+			}
+
+			const cached = this.proxied[propCache][k];
+			const {get: oldGet, set: oldSet, value} = descriptor;
+
+			let initialValue;
+			if (descriptor.hasOwnProperty('value')) {
+				initialValue = value;
+			} else if (oldGet) {
+				initialValue = oldGet.call(this.proxied);
+			}
+
+			this.proxied[propCache][k] = {
+				value: initialValue,
+				dirty: cached && cached.dirty
+			};
+
+			const get = function() {
+				return this[propCache][k].value;
+			};
+
+			const set = oldSet
 				? function(v) {
-					descriptor.value = oldSet.call(this, v);
-					descriptor.dirty = true;
+					this[propCache][k].value = oldSet.call(this, v);
+					this[propCache][k].dirty = true;
 				}
 				: function(v) {
-					descriptor.value = v;
-					descriptor.dirty = true;
+					this[propCache][k].value = v;
+					this[propCache][k].dirty = true;
 				};
-
 
 			defProp(this.proxied, k, {
 				enumerable: descriptor.enumerable,

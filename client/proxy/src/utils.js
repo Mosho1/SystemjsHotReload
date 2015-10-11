@@ -15,7 +15,6 @@ export const cloneInto = (target, source, {exclude = [], onDefine, noDelete = fa
 		const sourceDescriptor = Object.getOwnPropertyDescriptor(source, k);
 		if (targetDescriptor &&
 			!sourceDescriptor && shouldDelete(k, target, source) !== false
-			// isFunctionDescriptor(targetDescriptor)
 		) {
 			if (targetDescriptor && !targetDescriptor.configurable) {
 				return;
