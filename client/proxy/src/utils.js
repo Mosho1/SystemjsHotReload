@@ -1,6 +1,6 @@
 // const isFunctionDescriptor = descriptor => !descriptor.value || typeof descriptor.value === 'function';
 
-export const cloneInto = (target, source, {exclude = [], noDelete = false, enumerableOnly = false, onDelete} = {}) => {
+export const cloneInto = (target, source, {exclude = [], onDefine, noDelete = false, enumerableOnly = false, onDelete} = {}) => {
 
 	const getKeys = enumerableOnly ? Object.keys : Reflect.ownKeys;
 	const propertyNames = new Set(getKeys(target).concat(getKeys(source)));
@@ -15,6 +15,9 @@ export const cloneInto = (target, source, {exclude = [], noDelete = false, enume
 			!sourceDescriptor
 			// isFunctionDescriptor(targetDescriptor)
 		) {
+			if (targetDescriptor && !targetDescriptor.configurable) {
+				return;
+			}
 			if (onDelete) {
 				onDelete(k, target, source);
 			}
@@ -26,7 +29,8 @@ export const cloneInto = (target, source, {exclude = [], noDelete = false, enume
 		if (sourceDescriptor
 			&& (!targetDescriptor || targetDescriptor.configurable)
 			) {
-			Object.defineProperty(target, k, sourceDescriptor);
+			const descriptor = onDefine ? onDefine(k, target, source) : sourceDescriptor;
+			Object.defineProperty(target, k, descriptor);
 		}
 	});
 	return target;

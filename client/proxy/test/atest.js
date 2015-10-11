@@ -1,139 +1,135 @@
 import React, { Component } from 'react';
 import createShallowRenderer from './helpers/createShallowRenderer';
-import autobind from './helpers/autobind';
 import expect from 'expect';
 import { createProxy } from '../src';
 
 const fixtures = {
-  classic: {
-    Counter1x: React.createClass({
-      getInitialState() {
-        return { counter: 0 };
-      },
-
-      increment() {
-        this.setState({
-          counter: this.state.counter + 1
-        });
-      },
+  modern: {
+    StaticProperty: class StaticProperty {
+      static answer = 42;
 
       render() {
-        return <span>{this.state.counter}</span>;
+        return (
+          <div>{this.constructor.answer}</div>
+        );
       }
-    }),
+    },
 
-    Counter10x: React.createClass({
-      getInitialState() {
-        return { counter: 0 };
-      },
-
-      increment() {
-        this.setState({
-          counter: this.state.counter + 10
-        });
-      },
+    StaticPropertyUpdate: class StaticPropertyUpdate {
+      static answer = 43;
 
       render() {
-        return <span>{this.state.counter}</span>;
+        return (
+          <div>{this.constructor.answer}</div>
+        );
       }
-    }),
+    },
 
-    Counter100x: React.createClass({
-      getInitialState() {
-        return { counter: 0 };
-      },
-
-      increment() {
-        this.setState({
-          counter: this.state.counter + 100
-        });
-      },
-
+    StaticPropertyRemoval: class StaticPropertyRemoval {
       render() {
-        return <span>{this.state.counter}</span>;
+        return (
+          <div>{this.constructor.answer}</div>
+        );
       }
-    }),
+    },
 
-    CounterWithoutIncrementMethod: React.createClass({
-      getInitialState() {
-        return { counter: 0 };
-      },
+    PropTypes: class PropTypes {
+      static propTypes = {
+        something: React.PropTypes.number
+      };
 
-      render() {
-        return <span>{this.state.counter}</span>;
-      }
-    })
+      static contextTypes = {
+        something: React.PropTypes.number
+      };
+
+      static childContextTypes = {
+        something: React.PropTypes.number
+      };
+    },
+
+    PropTypesUpdate: class PropTypesUpdate {
+      static propTypes = {
+        something: React.PropTypes.string
+      };
+
+      static contextTypes = {
+        something: React.PropTypes.string
+      };
+
+      static childContextTypes = {
+        something: React.PropTypes.string
+      };
+    }
   },
 
-  modern: {
-    Counter1x: class Counter1x extends Component {
-      constructor(props) {
-        super(props);
-        this.state = { counter: 0 };
-      }
-
-      @autobind
-      increment() {
-        this.setState({
-          counter: this.state.counter + 1
-        });
-      }
+  classic: {
+    StaticProperty: React.createClass({
+      statics: {
+        answer: 42
+      },
 
       render() {
-        return <span>{this.state.counter}</span>;
+        return (
+          <div>{this.constructor.answer}</div>
+        );
       }
-    },
+    }),
 
-    Counter10x: class Counter10x extends Component {
-      constructor(props) {
-        super(props);
-        this.state = { counter: 0 };
-      }
-
-      @autobind
-      increment() {
-        this.setState({
-          counter: this.state.counter + 10
-        });
-      }
+    StaticPropertyUpdate: React.createClass({
+      statics: {
+        answer: 43
+      },
 
       render() {
-        return <span>{this.state.counter}</span>;
+        return (
+          <div>{this.constructor.answer}</div>
+        );
       }
-    },
+    }),
 
-    Counter100x: class Counter100x extends Component {
-      constructor(props) {
-        super(props);
-        this.state = { counter: 0 };
-      }
-
-      @autobind
-      increment() {
-        this.setState({
-          counter: this.state.counter + 100
-        });
-      }
-
+    StaticPropertyRemoval: React.createClass({
       render() {
-        return <span>{this.state.counter}</span>;
+        return (
+          <div>{this.constructor.answer}</div>
+        );
       }
-    },
+    }),
 
-    CounterWithoutIncrementMethod: class CounterWithoutIncrementMethod extends Component {
-      constructor(props) {
-        super(props);
-        this.state = { counter: 0 };
-      }
+    PropTypes: React.createClass({
+      render() {},
 
-      render() {
-        return <span>{this.state.counter}</span>;
+      propTypes: {
+        something: React.PropTypes.number
+      },
+
+      contextTypes: {
+        something: React.PropTypes.number
+      },
+
+      childContextTypes: {
+        something: React.PropTypes.number
       }
-    }
+    }),
+
+    PropTypesUpdate: React.createClass({
+      render() {},
+
+      propTypes: {
+        something: React.PropTypes.string
+      },
+
+      contextTypes: {
+        something: React.PropTypes.string
+      },
+
+      childContextTypes: {
+        something: React.PropTypes.string
+      }
+    })
   }
 };
 
-describe('autobound instance method', () => {
+describe('static property', () => {
   let renderer;
   let warnSpy;
 
@@ -144,83 +140,81 @@ describe('autobound instance method', () => {
 
   afterEach(() => {
     warnSpy.destroy();
-    // expect(warnSpy.calls.length).toBe(0);
+    expect(warnSpy.calls.length).toBe(0);
   });
 
   Object.keys(fixtures).forEach(type => {
     describe(type, () => {
+      const {
+        StaticProperty, StaticPropertyUpdate, StaticPropertyRemoval,
+        PropTypes, PropTypesUpdate
+      } = fixtures[type];
 
-      const { Counter1x, Counter10x, Counter100x, CounterWithoutIncrementMethod } = fixtures[type];
-
-      it('gets autobound', () => {
-        const proxy = createProxy(CounterWithoutIncrementMethod);
+      it('is available on proxy class instance', () => {
+        const proxy = createProxy(StaticProperty);
         const Proxy = proxy.get();
         const instance = renderer.render(<Proxy />);
-        expect(renderer.getRenderOutput().props.children).toEqual(0);
-
-        proxy.update(Counter1x);
-        instance.increment.call(null);
-        expect(renderer.getRenderOutput().props.children).toEqual(1);
+        expect(renderer.getRenderOutput().props.children).toEqual(42);
+        expect(Proxy.answer).toEqual(42);
       });
 
-      // it('is autobound after getting replaced', () => {
-      //   const proxy = createProxy(Counter1x);
-      //   const Proxy = proxy.get();
-      //   const instance = renderer.render(<Proxy />);
-      //   instance.increment.call(null);
-      //   expect(renderer.getRenderOutput().props.children).toEqual(1);
-      //   proxy.update(Counter10x);
-      //   instance.increment.call(null);
-      //   renderer.render(<Proxy />);
-      //   expect(renderer.getRenderOutput().props.children).toEqual(11);
+      it('is own on proxy class instance', () => {
+        const proxy = createProxy(StaticProperty);
+        const Proxy = proxy.get();
+        expect(Proxy.hasOwnProperty('answer')).toEqual(true);
+      });
 
-      //   proxy.update(Counter100x);
-      //   instance.increment.call(null);
-      //   renderer.render(<Proxy />);
-      //   expect(renderer.getRenderOutput().props.children).toEqual(111);
-      // });
-    });
-  });
+      it('is changed when not reassigned', () => {
+        const proxy = createProxy(StaticProperty);
+        const Proxy = proxy.get();
+        const instance = renderer.render(<Proxy />);
+        expect(renderer.getRenderOutput().props.children).toEqual(42);
 
-  describe('classic only', () => {
-    const { Counter1x, Counter10x, Counter100x } = fixtures.classic;
+        proxy.update(StaticPropertyUpdate);
+        renderer.render(<Proxy />);
+        expect(renderer.getRenderOutput().props.children).toEqual(43);
+        expect(Proxy.answer).toEqual(43);
 
-    /**
-     * Important in case it's a subscription that
-     * later needs to gets destroyed.
-     */
-    it('preserves the reference', () => {
-      const proxy = createProxy(Counter1x);
-      const Proxy = proxy.get();
-      const instance = renderer.render(<Proxy />);
-      const savedIncrement = instance.increment;
-      proxy.update(Counter10x);
-      expect(instance.increment).toBe(savedIncrement);
+        proxy.update(StaticPropertyRemoval);
+        renderer.render(<Proxy />);
+        expect(renderer.getRenderOutput().props.children).toEqual(undefined);
+        // expect(Proxy.answer).toEqual(undefined);
+      });
 
-      proxy.update(Counter100x);
-      expect(instance.increment).toBe(savedIncrement);
-    });
-  });
+      it('is changed for propTypes, contextTypes, childContextTypes', () => {
+        const proxy = createProxy(PropTypes);
+        const PropTypesProxy = proxy.get();
+        expect(PropTypesProxy.propTypes.something).toEqual(React.PropTypes.number);
+        expect(PropTypesProxy.contextTypes.something).toEqual(React.PropTypes.number);
+        expect(PropTypesProxy.childContextTypes.something).toEqual(React.PropTypes.number);
 
-  describe('modern only', () => {
-    const { Counter1x, Counter10x, Counter100x } = fixtures.modern;
+        proxy.update(PropTypesUpdate);
+        expect(PropTypesProxy.propTypes.something).toEqual(React.PropTypes.string);
+        expect(PropTypesProxy.contextTypes.something).toEqual(React.PropTypes.string);
+        expect(PropTypesProxy.childContextTypes.something).toEqual(React.PropTypes.string);
+      });
 
-    /**
-     * There's nothing we can do here.
-     * You can't use a lazy autobind with hot reloading
-     * and expect function reference equality.
-     */
-    it('does not preserve the reference (known limitation)', () => {
-      const proxy = createProxy(Counter1x);
-      const Proxy = proxy.get();
-      const instance = renderer.render(<Proxy />);
-      const savedIncrement = instance.increment;
+      // /**
+      //  * Sometimes people dynamically store stuff on statics.
+      //  */
+      it('is not changed when reassigned', () => {
+        const proxy = createProxy(StaticProperty);
+        const Proxy = proxy.get();
+        const instance = renderer.render(<Proxy />);
+        expect(renderer.getRenderOutput().props.children).toEqual(42);
 
-      proxy.update(Counter10x);
-      expect(instance.increment).toBe(savedIncrement);
+        Proxy.answer = 100;
 
-      proxy.update(Counter100x);
-      expect(instance.increment).toBe(savedIncrement);
+        proxy.update(StaticPropertyUpdate);
+        renderer.render(<Proxy />);
+        expect(renderer.getRenderOutput().props.children).toEqual(100);
+        expect(Proxy.answer).toEqual(100);
+
+        proxy.update(StaticPropertyRemoval);
+        renderer.render(<Proxy />);
+        // expect(renderer.getRenderOutput().props.children).toEqual(100);
+        // expect(Proxy.answer).toEqual(100);
+      });
     });
   });
 });
