@@ -7,6 +7,7 @@ import React from 'react';
 const noop = x => x;
 const ownKeys = obj => Object.getOwnPropertyNames(obj).concat(Object.getOwnPropertySymbols(obj));
 const getDescriptor = Object.getOwnPropertyDescriptor;
+const defProp = Object.defineProperty;
 
 const objectProtoKeys = ownKeys(Object.getPrototypeOf({}));
 // const deprecated = ['getDOMNode', 'isMounted', 'replaceProps', 'replaceState', 'setProps'];
@@ -26,7 +27,7 @@ const constructor = Symbol('constructor');
 const reactProxy = Symbol('reactProxy');
 const originalFn = Symbol('original unbound fn');
 
-const defineProxyProp = (obj, desc) => Object.defineProperty(obj, reactProxy, desc || {value: true});
+const defineProxyProp = (obj, desc) => defProp(obj, reactProxy, desc || {value: true});
 
 const protoBind = Function.prototype.bind;
 Function.prototype.bind = function(...args) {
@@ -47,7 +48,7 @@ const flattenPrototypes = (obj, exclude) => {
 		const protoDescriptor = getDescriptor(flattened, k);
 		const ownDescriptor = getDescriptor(o, k);
 		if (!ownDescriptor) {
-			Object.defineProperty(o, k, protoDescriptor);
+			defProp(o, k, protoDescriptor);
 		}
 		return o;
 	}, obj);
@@ -61,7 +62,7 @@ const flattenPrototypes = (obj, exclude) => {
 const controlledObject = (object, instance) => {
 
 	if (!instance.hasOwnProperty(propCache)) {
-		Object.defineProperty(instance, propCache, {
+		defProp(instance, propCache, {
 			value: {}
 		});
 	}
@@ -81,7 +82,7 @@ const controlledObject = (object, instance) => {
 
 			if (!cachedProp.prop.value && cachedProp.prop.get) {
 				const desc = getDescriptor(this, k);
-				// Object.defineProperty(this, k, {});
+				// defProp(this, k, {});
 				const defineProperty = Object.defineProperty;
 				let isAutobind;
 				Object.defineProperty = (context, key, descriptor) => {
@@ -98,7 +99,7 @@ const controlledObject = (object, instance) => {
 					cachedProp.value = get && get.call();
 				}
 				Object.defineProperty = defineProperty;
-				// Object.defineProperty(this, k, desc);
+				// defProp(this, k, desc);
 
 			}
 
@@ -136,7 +137,7 @@ const controlledObject = (object, instance) => {
 
 		defineProxyProp(cachedProp.getter);
 		defineProxyProp(cachedProp.setter);
-		Object.defineProperty(object, k, {
+		defProp(object, k, {
 			configurable: true,
 			enumerable: true,
 			get: cachedProp.getter,
@@ -154,7 +155,7 @@ const deleteFromControlledOnbject = (controlled, k) => {
 		prop.bound.call = noop;
 		prop.bound.apply = noop;
 	}
-	Object.defineProperty(controlled, k, {
+	defProp(controlled, k, {
 		enumerable: true,
 		get() {
 			if (prop && prop.wasSet) {
@@ -162,7 +163,7 @@ const deleteFromControlledOnbject = (controlled, k) => {
 			}
 		},
 		set(value) {
-			Object.defineProperty(this, k, {value, ...propDefaults});
+			defProp(this, k, {value, ...propDefaults});
 		}
 	});
 };
@@ -180,6 +181,13 @@ export class Proxy {
 		};
 
 		this.proxied[propCache] = {...this.proxied};
+
+		if (!this.proxied.hasOwnProperty(propCache)) {
+			defProp(this.proxied, propCache, {
+				value: {},
+				configurable: true
+			});
+		}
 
 		this.update(Component);
 
@@ -245,28 +253,60 @@ export class Proxy {
 		instances.forEach(instance => this.updateInstance(instance, Component));
 		this[constructor] = Component;
 		cloneInto(this.proxied.prototype, Component.prototype);
+		console.log(this.proxied.answer, Component.answer)
 		cloneInto(this.proxied, Component, {
 			exclude: ['type', propCache],
 			// enumerableOnly: true,
-			noDelete: true,
-			onDelete: k => {
-				const proto = this.proxied;
-				if (this.proxied[k] === proto[k]) {
-					delete this.proxied[k];
+			shouldDefine: (k, target) => {
+				const desc = getDescriptor(target, k);
+				if (desc.dirty || !desc[reactProxy]) {
+					return false;
 				}
 			},
-			onDefine: (k, target, source) => {
-				const proto = this.proxied[propCache];
-				const oldFn = proto[k] && (proto[k][originalFn] || proto[k]);
-				const newFn = this.proxied[k] && (this.proxied[k][originalFn] || this.proxied[k]);
-				if (proto.hasOwnProperty(k) && newFn !== oldFn) {
-					return getDescriptor(this.proxied, k);
-				} else {
-					return getDescriptor(Component, k);
+			shouldDelete: (k, target) => {
+				const desc = getDescriptor(target, k);
+				if (desc.dirty || !desc[reactProxy]) {
+					return false;
 				}
 			}
 		});
-		this.proxied[propCache] = {...this.proxied};
+		if (!this.proxied.hasOwnProperty(propCache)) {
+			defProp(this.proxied, propCache, {
+				value: {},
+				configurable: true
+			});
+		}
+
+		ownKeys(this.proxied).forEach(k => {
+			const descriptor = getDescriptor(this.proxied, k);
+			descriptor[reactProxy] = true;
+			if (!descriptor.configurable) return;
+			const {get: oldGet, set: oldSet} = descriptor;
+			const get = oldGet
+				? function() {
+					return oldGet.call(this);
+				}
+				: function() {
+					return descriptor.value;
+				};
+
+			const set = oldGet
+				? function(v) {
+					descriptor.value = oldSet.call(this, v);
+					descriptor.dirty = true;
+				}
+				: function(v) {
+					descriptor.value = v;
+					descriptor.dirty = true;
+				};
+
+
+			defProp(this.proxied, k, {
+				enumerable: descriptor.enumerable,
+				get, set
+			});
+		});
+
 		this.proxied.prototype.constructor = this.proxied;
 	}
 

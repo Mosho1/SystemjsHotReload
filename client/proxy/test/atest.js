@@ -5,131 +5,53 @@ import { createProxy } from '../src';
 
 const fixtures = {
   modern: {
-    StaticProperty: class StaticProperty {
-      static answer = 42;
+    StaticDescriptor: class StaticDescriptor {
+      static get answer() {
+        return 42;
+      }
+
+      static set something(value) {
+        this._something = value * 2;
+      }
 
       render() {
-        return (
-          <div>{this.constructor.answer}</div>
-        );
+        return <div>{this.constructor.answer}</div>;
       }
     },
 
-    StaticPropertyUpdate: class StaticPropertyUpdate {
-      static answer = 43;
+    StaticDescriptorUpdate: class StaticDescriptorUpdate {
+      static get answer() {
+        return 43;
+      }
+
+      static set something(value) {
+        this._something = value * 3;
+      }
 
       render() {
-        return (
-          <div>{this.constructor.answer}</div>
-        );
+        return <div>{this.constructor.answer}</div>;
       }
     },
 
-    StaticPropertyRemoval: class StaticPropertyRemoval {
+    StaticDescriptorRemoval: class StaticDescriptorRemoval {
       render() {
-        return (
-          <div>{this.constructor.answer}</div>
-        );
+        return <div>{this.constructor.answer}</div>;
       }
     },
 
-    PropTypes: class PropTypes {
-      static propTypes = {
-        something: React.PropTypes.number
-      };
+    ThrowingAccessors: class ThrowingAccessors {
+      static get something() {
+        throw new Error();
+      }
 
-      static contextTypes = {
-        something: React.PropTypes.number
-      };
-
-      static childContextTypes = {
-        something: React.PropTypes.number
-      };
-    },
-
-    PropTypesUpdate: class PropTypesUpdate {
-      static propTypes = {
-        something: React.PropTypes.string
-      };
-
-      static contextTypes = {
-        something: React.PropTypes.string
-      };
-
-      static childContextTypes = {
-        something: React.PropTypes.string
-      };
+      static set something(value) {
+        throw new Error();
+      }
     }
-  },
-
-  classic: {
-    StaticProperty: React.createClass({
-      statics: {
-        answer: 42
-      },
-
-      render() {
-        return (
-          <div>{this.constructor.answer}</div>
-        );
-      }
-    }),
-
-    StaticPropertyUpdate: React.createClass({
-      statics: {
-        answer: 43
-      },
-
-      render() {
-        return (
-          <div>{this.constructor.answer}</div>
-        );
-      }
-    }),
-
-    StaticPropertyRemoval: React.createClass({
-      render() {
-        return (
-          <div>{this.constructor.answer}</div>
-        );
-      }
-    }),
-
-    PropTypes: React.createClass({
-      render() {},
-
-      propTypes: {
-        something: React.PropTypes.number
-      },
-
-      contextTypes: {
-        something: React.PropTypes.number
-      },
-
-      childContextTypes: {
-        something: React.PropTypes.number
-      }
-    }),
-
-    PropTypesUpdate: React.createClass({
-      render() {},
-
-      propTypes: {
-        something: React.PropTypes.string
-      },
-
-      contextTypes: {
-        something: React.PropTypes.string
-      },
-
-      childContextTypes: {
-        something: React.PropTypes.string
-      }
-    })
   }
 };
 
-describe('static property', () => {
+describe('static descriptor', () => {
   let renderer;
   let warnSpy;
 
@@ -144,76 +66,105 @@ describe('static property', () => {
   });
 
   Object.keys(fixtures).forEach(type => {
+    const { StaticDescriptor, StaticDescriptorUpdate, StaticDescriptorRemoval, ThrowingAccessors } = fixtures[type];
+
     describe(type, () => {
-      const {
-        StaticProperty, StaticPropertyUpdate, StaticPropertyRemoval,
-        PropTypes, PropTypesUpdate
-      } = fixtures[type];
+     
+      describe('getter', () => {
+       
 
-      it('is available on proxy class instance', () => {
-        const proxy = createProxy(StaticProperty);
-        const Proxy = proxy.get();
-        const instance = renderer.render(<Proxy />);
-        expect(renderer.getRenderOutput().props.children).toEqual(42);
-        expect(Proxy.answer).toEqual(42);
+        it('gets replaced', () => {
+          const proxy = createProxy(StaticDescriptor);
+          const Proxy = proxy.get();
+          const instance = renderer.render(<Proxy />);
+          expect(renderer.getRenderOutput().props.children).toEqual(42);
+
+          proxy.update(StaticDescriptorUpdate);
+          renderer.render(<Proxy />);
+          expect(renderer.getRenderOutput().props.children).toEqual(43);
+          expect(instance.constructor.answer).toEqual(43);
+
+          proxy.update(StaticDescriptorRemoval);
+          renderer.render(<Proxy />);
+          expect(renderer.getRenderOutput().props.children).toEqual(undefined);
+          expect(instance.answer).toEqual(undefined);
+        });
+
+    it('gets redefined', () => {
+      const proxy = createProxy(StaticDescriptor);
+      const Proxy = proxy.get();
+      const instance = renderer.render(<Proxy />);
+      expect(renderer.getRenderOutput().props.children).toEqual(42);
+      Object.defineProperty(instance.constructor, 'answer', {
+        value: 7
       });
 
-      it('is own on proxy class instance', () => {
-        const proxy = createProxy(StaticProperty);
-        const Proxy = proxy.get();
-        expect(Proxy.hasOwnProperty('answer')).toEqual(true);
+      proxy.update(StaticDescriptorUpdate);
+
+      renderer.render(<Proxy />);
+      expect(renderer.getRenderOutput().props.children).toEqual(7);
+      expect(instance.constructor.answer).toEqual(7);
+
+      proxy.update(StaticDescriptorRemoval);
+      renderer.render(<Proxy />);
+      expect(renderer.getRenderOutput().props.children).toEqual(7);
+      expect(instance.constructor.answer).toEqual(7);
+    });
+
       });
 
-      it('is changed when not reassigned', () => {
-        const proxy = createProxy(StaticProperty);
-        const Proxy = proxy.get();
-        const instance = renderer.render(<Proxy />);
-        expect(renderer.getRenderOutput().props.children).toEqual(42);
+      describe('setter', () => {
+        // it('is available on proxy class instance', () => {
+        //   const proxy = createProxy(StaticDescriptor);
+        //   const Proxy = proxy.get();
+        //   const instance = renderer.render(<Proxy />);
+        //   instance.constructor.something = 10;
+        // });
 
-        proxy.update(StaticPropertyUpdate);
-        renderer.render(<Proxy />);
-        expect(renderer.getRenderOutput().props.children).toEqual(43);
-        expect(Proxy.answer).toEqual(43);
+        // it('gets added', () => {
+        //   const proxy = createProxy(StaticDescriptorRemoval);
+        //   const Proxy = proxy.get();
+        //   const instance = renderer.render(<Proxy />);
 
-        proxy.update(StaticPropertyRemoval);
-        renderer.render(<Proxy />);
-        expect(renderer.getRenderOutput().props.children).toEqual(undefined);
-        // expect(Proxy.answer).toEqual(undefined);
-      });
+        //   proxy.update(StaticDescriptor);
+        //   instance.constructor.something = 10;
+        //   expect(instance.constructor._something).toEqual(20);
+        // });
 
-      it('is changed for propTypes, contextTypes, childContextTypes', () => {
-        const proxy = createProxy(PropTypes);
-        const PropTypesProxy = proxy.get();
-        expect(PropTypesProxy.propTypes.something).toEqual(React.PropTypes.number);
-        expect(PropTypesProxy.contextTypes.something).toEqual(React.PropTypes.number);
-        expect(PropTypesProxy.childContextTypes.something).toEqual(React.PropTypes.number);
+        // it('gets replaced', () => {
+        //   const proxy = createProxy(StaticDescriptor);
+        //   const Proxy = proxy.get();
+        //   const instance = renderer.render(<Proxy />);
+        //   instance.constructor.something = 10;
+        //   expect(instance.constructor._something).toEqual(20);
 
-        proxy.update(PropTypesUpdate);
-        expect(PropTypesProxy.propTypes.something).toEqual(React.PropTypes.string);
-        expect(PropTypesProxy.contextTypes.something).toEqual(React.PropTypes.string);
-        expect(PropTypesProxy.childContextTypes.something).toEqual(React.PropTypes.string);
-      });
+        //   proxy.update(StaticDescriptorUpdate);
+        //   expect(instance.constructor._something).toEqual(20);
+        //   instance.constructor.something = 10;
+        //   expect(instance.constructor._something).toEqual(30);
 
-      // /**
-      //  * Sometimes people dynamically store stuff on statics.
-      //  */
-      it('is not changed when reassigned', () => {
-        const proxy = createProxy(StaticProperty);
-        const Proxy = proxy.get();
-        const instance = renderer.render(<Proxy />);
-        expect(renderer.getRenderOutput().props.children).toEqual(42);
+        //   proxy.update(StaticDescriptorRemoval);
+        //   expect(instance.constructor._something).toEqual(30);
+        //   instance.constructor.something = 7;
+        //   expect(instance.constructor.something).toEqual(7);
+        //   expect(instance.constructor._something).toEqual(30);
+        // });
 
-        Proxy.answer = 100;
+        // it('gets redefined', () => {
+        //   const proxy = createProxy(StaticDescriptor);
+        //   const Proxy = proxy.get();
+        //   const instance = renderer.render(<Proxy />);
+        //   expect(renderer.getRenderOutput().props.children).toEqual(42);
 
-        proxy.update(StaticPropertyUpdate);
-        renderer.render(<Proxy />);
-        expect(renderer.getRenderOutput().props.children).toEqual(100);
-        expect(Proxy.answer).toEqual(100);
+        //   Object.defineProperty(instance.constructor, 'something', {
+        //     value: 50
+        //   });
 
-        proxy.update(StaticPropertyRemoval);
-        renderer.render(<Proxy />);
-        // expect(renderer.getRenderOutput().props.children).toEqual(100);
-        // expect(Proxy.answer).toEqual(100);
+        //   console.log('wat',instance.constructor.something)
+
+        //   proxy.update(StaticDescriptorUpdate);
+        //   expect(instance.constructor.something).toEqual(50);
+        // });
       });
     });
   });
