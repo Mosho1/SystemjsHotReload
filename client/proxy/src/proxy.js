@@ -9,6 +9,7 @@ const ownKeys = obj => Object.getOwnPropertyNames(obj).concat(Object.getOwnPrope
 const getDescriptor = Object.getOwnPropertyDescriptor;
 
 const objectProtoKeys = ownKeys(Object.getPrototypeOf({}));
+const functionProtoKeys = ownKeys(Object.getPrototypeOf(function(){}));
 // const deprecated = ['getDOMNode', 'isMounted', 'replaceProps', 'replaceState', 'setProps'];
 const deprecated = [];
 const internals = ['_reactInternalInstance', '__reactAutoBindMap', 'refs'];
@@ -44,13 +45,15 @@ const defineProxyProp = (obj, desc) => defProp(obj, reactProxy, desc || {value: 
 
 const flattenPrototypes = (obj, exclude) => {
 	const proto = Object.getPrototypeOf(obj);
+
 	if (!proto) {
 		return null;
 	}
+
 	const flattened = flattenPrototypes(proto, exclude) || obj;
 	let keys = ownKeys(flattened);
 
-	return keys.filter(k => !exclude.includes(k)).reduce((o, k) => {
+	obj = keys.filter(k => !exclude.includes(k)).reduce((o, k) => {
 		const protoDescriptor = getDescriptor(flattened, k);
 		const ownDescriptor = getDescriptor(o, k);
 		if (!ownDescriptor) {
@@ -58,6 +61,10 @@ const flattenPrototypes = (obj, exclude) => {
 		}
 		return o;
 	}, obj);
+
+	// Object.setPrototypeOf(obj, proto);
+
+	return obj;
 };
 
 // const curry = (fn, boundArgs) => (...args) => {
@@ -99,8 +106,10 @@ const controlledObject = (object, instance) => {
 					}
 				};
 				const {get} = cachedProp.prop;
+
 				cachedProp.value = get && get.call(this);
 				if (isAutobind) {
+
 					cachedProp.value = get && get.call();
 				}
 				Object.defineProperty = defineProperty;
@@ -131,6 +140,7 @@ const controlledObject = (object, instance) => {
 			if (cachedProp.bound === v) {
 				return;
 			}
+
 			cachedProp.value = set
 				? set.call(this, v)
 				: v;
@@ -172,12 +182,15 @@ const deleteFromControlledOnbject = (controlled, k) => {
 export class Proxy {
 	constructor(Component) {
 		this[constructor] = Component;
-		this.instances = new Set();
 		this.proxied = (props) => {
 			const instance = this.updateInstance({props});
 			Object.setPrototypeOf(instance, this.proxied.prototype);
 			return instance;
 		};
+
+	    cloneInto(this.proxied.prototype, Component.prototype);
+		this.proxied.prototype.instances = this.instances = Component.prototype.instances || new Set();
+		this.wrapLifestyleMethods(this.proxied.prototype);
 
 		this.proxied[propCache] = {...this.proxied};
 
@@ -193,23 +206,19 @@ export class Proxy {
 		defineProxyProp(this.proxied, {value: this});
 	}
 
-	updateInstance(instance = {}, Component = this[constructor]) {
+	wrapLifestyleMethods(component) {
+
+
 		const {instances} = this;
 
-		const newInstance = new Component(instance.props);
-		if (newInstance.componentWillMount) {
-			newInstance.componentWillMount();
+		const componentWillMount = component.componentWillMount || noop;
+		const componentWillUnmount = component.componentWillUnmount || noop;
+
+		if (component.componentWillMount && component.componentWillMount[reactProxy] === true) {
+			return;
 		}
-		// console.log(newInstance.render.toString())
 
-		const exclude = objectProtoKeys.concat(deprecated);
-
-		const flattened = flattenPrototypes(newInstance, exclude);
-
-		const componentWillMount = flattened.componentWillMount || noop;
-		const componentWillUnmount = flattened.componentWillUnmount || noop;
-
-		Object.assign(flattened, {
+		Object.assign(component, {
 			componentWillMount() {
 				componentWillMount.call(this);
 				instances.add(this);
@@ -220,13 +229,30 @@ export class Proxy {
 			}
 		});
 
+		component.componentWillMount[reactProxy] = true;
+
+	}
+
+	updateInstance(instance = {}, Component = this[constructor]) {
+
+		const {instances} = this;
+
+		const newInstance = new Component(instance.props);
+		if (newInstance.componentWillMount && !newInstance.componentWillMount[reactProxy]) {
+			newInstance.componentWillMount();
+		}
+
+		const exclude = objectProtoKeys.concat(deprecated);
+
+		const flattened = flattenPrototypes(newInstance, exclude);
+
+		this.wrapLifestyleMethods(flattened);
+
 		flattened.state = instance.state || flattened.state || {};
 		flattened.props = instance.props || flattened.props || {};
 		flattened.context = instance.context || flattened.context || {};
 
 		controlledObject(flattened, instance);
-
-		Object.setPrototypeOf(flattened, {});
 
 		// for instance-descriptor tests, don't delete properties which aren't on the prototype of the Component.
 		const namesToExclude = Object.keys(instance).filter(k => {
@@ -234,6 +260,18 @@ export class Proxy {
 			const hasProxySymbol = [get, set, value].some(x => getProp(x, reactProxy));
 			return !hasProxySymbol;
 		});
+
+		const instanceProtoKeys = ownKeys(Object.getPrototypeOf(instance));
+		const newProtoKeys = ownKeys(Component.prototype);
+		const oldProtoKeys = ownKeys(this[constructor].prototype);
+
+		namesToExclude.push(...instanceProtoKeys.filter(k =>
+			!newProtoKeys.includes(k) && !oldProtoKeys.includes(k)));
+		if (instance.constructor[reactProxy]) {
+			cloneInto(instance.constructor, Component, {
+				exclude:  ['length', 'name', 'prototype', 'bind', 'call', 'apply', propCache, reactProxy]
+			});
+		}
 
 		cloneInto(instance, flattened, {
 			exclude: internals.concat(namesToExclude),
@@ -248,13 +286,13 @@ export class Proxy {
 	}
 
 	update(Component) {
-		if (Component[reactProxy]) {
-			return Component[reactProxy];
-		}
 		const {instances} = this;
-		instances.forEach(instance => this.updateInstance(instance, Component));
-		this[constructor] = Component;
+		const exclude = objectProtoKeys.concat(deprecated).concat('arguments', 'caller');
+		Component = flattenPrototypes(Component, exclude);
 		cloneInto(this.proxied.prototype, Component.prototype);
+		this.proxied.prototype.instances = this.instances = instances;
+		instances.forEach(instance => this.updateInstance(instance, Component));
+
 		cloneInto(this.proxied, Component, {
 			exclude: ['type', propCache, reactProxy],
 			// enumerableOnly: true,
@@ -272,6 +310,13 @@ export class Proxy {
 				}
 			}
 		});
+
+		this[constructor] = Component;
+
+		if (Component[propCache]) {
+			this.proxied[propCache] = Object.assign(this.proxied[propCache] || {}, Component[propCache]);
+		}
+
 		ownKeys(this.proxied).forEach(k => {
 			const descriptor = getDescriptor(this.proxied, k);
 
@@ -288,11 +333,11 @@ export class Proxy {
 			} else if (oldGet) {
 				initialValue = oldGet.call(this.proxied);
 			}
-
 			this.proxied[propCache][k] = {
 				value: initialValue,
 				dirty: cached && cached.dirty
 			};
+
 
 			const get = function() {
 				return this[propCache][k].value;
@@ -325,9 +370,10 @@ export class Proxy {
 			});
 		});
 
+		this.wrapLifestyleMethods(this.proxied.prototype);
 		this.proxied.prototype.constructor = this.proxied;
 
-		return instances;
+		return [...instances];
 	}
 
 	get() {

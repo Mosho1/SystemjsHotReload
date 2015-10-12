@@ -2,15 +2,21 @@
 
 const noop = () => null;
 
-export const cloneInto = (target, source, {exclude = [], onDefine, noDelete = false, enumerableOnly = false, onDelete, shouldDelete = noop, shouldDefine = noop} = {}) => {
+export const cloneInto = (target, source, {mutate = true, exclude = [], onDefine, noDelete = false, enumerableOnly = false, onDelete, shouldDelete = noop, shouldDefine = noop} = {}) => {
+
+	let returnTarget = target;
+
 
 	const getKeys = enumerableOnly ? Object.keys : Reflect.ownKeys;
 	const propertyNames = new Set(getKeys(target).concat(getKeys(source)));
+
+	if (!mutate) {
+		returnTarget = [...propertyNames].reduce((acc, k) => (acc[k] = target[k], acc), {});
+	}
 	propertyNames.forEach(k => {
 		if (exclude.includes(k)) {
 			return;
 		}
-
 		const targetDescriptor = Object.getOwnPropertyDescriptor(target, k);
 		const sourceDescriptor = Object.getOwnPropertyDescriptor(source, k);
 		if (targetDescriptor &&
@@ -31,8 +37,8 @@ export const cloneInto = (target, source, {exclude = [], onDefine, noDelete = fa
 			&& (!targetDescriptor || targetDescriptor.configurable)
 			&& shouldDefine(k, target, source) !== false) {
 			const descriptor = onDefine ? onDefine(k, target, source) : sourceDescriptor;
-			Object.defineProperty(target, k, descriptor, true);
+			Object.defineProperty(returnTarget, k, descriptor, true);
 		}
 	});
-	return target;
+	return returnTarget;
 };
