@@ -25,7 +25,6 @@ const propCache = Symbol('propCache');
 const constructor = Symbol('constructor');
 const reactProxy = Symbol('reactProxy');
 const originalFn = Symbol('original unbound fn');
-
 const protoBind = Function.prototype.bind;
 Function.prototype.bind = function(...args) {
 	const bound = protoBind.apply(this, args);
@@ -34,9 +33,10 @@ Function.prototype.bind = function(...args) {
 };
 
 const defProp = Object.defineProperty;
-Object.defineProperty = (context, key, descriptor) => {
-	context[propCache] = context[propCache] || {};
-	context[propCache][key] = {dirty: true};
+Object.defineProperty = (context, key, descriptor, noCache) => {
+	if (context[propCache] && !noCache) {
+		context[propCache][key] = {dirty: true};
+	}
 	return defProp(context, key, descriptor);
 };
 
@@ -171,7 +171,7 @@ const deleteFromControlledOnbject = (controlled, k) => {
 @autobind
 export class Proxy {
 	constructor(Component) {
-
+		this[constructor] = Component;
 		this.instances = new Set();
 		this.proxied = (props) => {
 			const instance = this.updateInstance({props});
@@ -194,13 +194,13 @@ export class Proxy {
 	}
 
 	updateInstance(instance = {}, Component = this[constructor]) {
-
 		const {instances} = this;
 
 		const newInstance = new Component(instance.props);
 		if (newInstance.componentWillMount) {
 			newInstance.componentWillMount();
 		}
+		// console.log(newInstance.render.toString())
 
 		const exclude = objectProtoKeys.concat(deprecated);
 
@@ -248,22 +248,26 @@ export class Proxy {
 	}
 
 	update(Component) {
+		if (Component[reactProxy]) {
+			return Component[reactProxy];
+		}
 		const {instances} = this;
 		instances.forEach(instance => this.updateInstance(instance, Component));
 		this[constructor] = Component;
 		cloneInto(this.proxied.prototype, Component.prototype);
 		cloneInto(this.proxied, Component, {
-			exclude: ['type', propCache],
+			exclude: ['type', propCache, reactProxy],
 			// enumerableOnly: true,
 			shouldDefine: (k, target) => {
 				const cache = target[propCache][k];
-				if (cache && cache.dirty) {
+				const isProxy = target.hasOwnProperty(reactProxy);
+				if (isProxy && cache && cache.dirty) {
 					return false;
 				}
 			},
 			shouldDelete: (k, target) => {
 				const cache = target[propCache][k];
-				if (cache && cache.dirty) {
+				if (!cache || (cache && cache.dirty)) {
 					return false;
 				}
 			}
@@ -294,15 +298,26 @@ export class Proxy {
 				return this[propCache][k].value;
 			};
 
-			const set = oldSet
-				? function(v) {
-					this[propCache][k].value = oldSet.call(this, v);
-					this[propCache][k].dirty = true;
-				}
-				: function(v) {
-					this[propCache][k].value = v;
-					this[propCache][k].dirty = true;
-				};
+			let set;
+			if (oldSet && oldSet[reactProxy]) {
+				set = oldSet;
+			} else {
+				set = oldSet
+					? function(v) {
+						this[propCache][k].value = oldSet.call(this, v);
+					}
+					: function(v) {
+						const origFn = v[originalFn];
+						const oldValue = this[propCache][k].value;
+						const newValue = origFn
+								? v[originalFn]
+								: v;
+						this[propCache][k].dirty = newValue !== oldValue;
+						this[propCache][k].value = newValue;
+					};
+			}
+
+			set[reactProxy] = get[reactProxy] = true;
 
 			defProp(this.proxied, k, {
 				enumerable: descriptor.enumerable,
@@ -311,6 +326,8 @@ export class Proxy {
 		});
 
 		this.proxied.prototype.constructor = this.proxied;
+
+		return instances;
 	}
 
 	get() {
