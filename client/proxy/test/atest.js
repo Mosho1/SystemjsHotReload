@@ -5,79 +5,55 @@ import { createProxy } from '../src';
 
 const fixtures = {
   modern: {
-    StaticMethod: class StaticMethod {
-      static getAnswer() {
+    StaticDescriptor: class StaticDescriptor {
+      static get answer() {
         return 42;
-      };
+      }
+
+      static set something(value) {
+        console.log(this)
+        this._something = value * 2;
+      }
 
       render() {
-        return (
-          <div>{this.constructor.getAnswer()}</div>
-        );
+        return <div>{this.constructor.answer}</div>;
       }
     },
 
-    StaticMethodUpdate: class StaticMethodUpdate {
-      static getAnswer() {
+    StaticDescriptorUpdate: class StaticDescriptorUpdate {
+      static get answer() {
         return 43;
-      };
+      }
+
+      static set something(value) {
+        this._something = value * 3;
+      }
 
       render() {
-        return (
-          <div>{this.constructor.getAnswer()}</div>
-        );
+        return <div>{this.constructor.answer}</div>;
+      }
+
+    },
+
+    StaticDescriptorRemoval: class StaticDescriptorRemoval {
+      render() {
+        return <div>{this.constructor.answer}</div>;
       }
     },
 
-    StaticMethodRemoval: class StaticMethodRemoval {
-      render() {
-        return (
-          <div>{this.constructor.getAnswer()}</div>
-        );
+    ThrowingAccessors: class ThrowingAccessors {
+      static get something() {
+        throw new Error();
+      }
+
+      static set something(value) {
+        throw new Error();
       }
     }
-  },
-
-  classic: {
-    StaticMethod: React.createClass({
-      statics: {
-        getAnswer() {
-          return 42;
-        }
-      },
-
-      render() {
-        return (
-          <div>{this.constructor.getAnswer()}</div>
-        );
-      }
-    }),
-
-    StaticMethodUpdate: React.createClass({
-      statics: {
-        getAnswer() {
-          return 43;
-        }
-      },
-
-      render() {
-        return (
-          <div>{this.constructor.getAnswer()}</div>
-        );
-      }
-    }),
-
-    StaticMethodRemoval: React.createClass({
-      render() {
-        return (
-          <div>{this.constructor.getAnswer()}</div>
-        );
-      }
-    })
   }
 };
 
-describe('static method', () => {
+describe('static descriptor', () => {
   let renderer;
   let warnSpy;
 
@@ -92,79 +68,104 @@ describe('static method', () => {
   });
 
   Object.keys(fixtures).forEach(type => {
-    describe(type, () => {
-      const { StaticMethod, StaticMethodUpdate, StaticMethodRemoval } = fixtures[type];
+    const { StaticDescriptor, StaticDescriptorUpdate, StaticDescriptorRemoval, ThrowingAccessors } = fixtures[type];
 
-      it('is available on proxy class instance', () => {
-        const proxy = createProxy(StaticMethod);
+    describe(type, () => {
+     
+      describe('getter', () => {
+       
+
+      it('gets replaced', () => {
+        const proxy = createProxy(StaticDescriptor);
         const Proxy = proxy.get();
         const instance = renderer.render(<Proxy />);
         expect(renderer.getRenderOutput().props.children).toEqual(42);
-        expect(Proxy.getAnswer()).toEqual(42);
+
+        proxy.update(StaticDescriptorUpdate);
+        renderer.render(<Proxy />);
+        expect(renderer.getRenderOutput().props.children).toEqual(43);
+        expect(instance.constructor.answer).toEqual(43);
+
+        proxy.update(StaticDescriptorRemoval);
+        renderer.render(<Proxy />);
+        expect(renderer.getRenderOutput().props.children).toEqual(undefined);
+        expect(instance.answer).toEqual(undefined);
       });
 
-      // it('is own on proxy class instance', () => {
-      //   const proxy = createProxy(StaticMethod);
-      //   const Proxy = proxy.get();
-      //   expect(Proxy.hasOwnProperty('getAnswer')).toEqual(true);
-      // });
+    it('gets redefined', () => {
+      const proxy = createProxy(StaticDescriptor);
+      const Proxy = proxy.get();
+      const instance = renderer.render(<Proxy />);
+      expect(renderer.getRenderOutput().props.children).toEqual(42);
+      Object.defineProperty(instance.constructor, 'answer', {
+        value: 7
+      });
 
-      // it('gets added', () => {
-      //   const proxy = createProxy(StaticMethodRemoval);
-      //   const Proxy = proxy.get();
-      //   expect(Proxy.getAnswer).toEqual(undefined);
+      proxy.update(StaticDescriptorUpdate);
 
-      //   proxy.update(StaticMethod);
-      //   const instance = renderer.render(<Proxy />);
-      //   expect(renderer.getRenderOutput().props.children).toEqual(42);
-      //   expect(Proxy.getAnswer()).toEqual(42);
-      // });
+      renderer.render(<Proxy />);
+      expect(renderer.getRenderOutput().props.children).toEqual(7);
+      expect(instance.constructor.answer).toEqual(7);
 
-      // it('gets replaced', () => {
-      //   const proxy = createProxy(StaticMethod);
-      //   const Proxy = proxy.get();
-      //   const instance = renderer.render(<Proxy />);
-      //   expect(renderer.getRenderOutput().props.children).toEqual(42);
-      //   expect(Proxy.getAnswer()).toEqual(42);
+      proxy.update(StaticDescriptorRemoval);
+      renderer.render(<Proxy />);
+      expect(renderer.getRenderOutput().props.children).toEqual(7);
+      expect(instance.constructor.answer).toEqual(7);
+    });
 
-      //   proxy.update(StaticMethodUpdate);
-      //   renderer.render(<Proxy />);
-      //   expect(renderer.getRenderOutput().props.children).toEqual(43);
-      //   expect(Proxy.getAnswer()).toEqual(43);
-      // });
+      });
 
-      // *
-      //  * Known limitation.
-      //  * If you find a way around it without breaking other tests, let me know!
-       
-      // it('does not get replaced if bound (known limitation)', () => {
-      //   const proxy = createProxy(StaticMethod);
-      //   const Proxy = proxy.get();
-      //   const getAnswer = Proxy.getAnswer = Proxy.getAnswer.bind(Proxy);
+      describe('setter', () => {
+        it('is available on proxy class instance', () => {
+          const proxy = createProxy(StaticDescriptor);
+          const Proxy = proxy.get();
+          const instance = renderer.render(<Proxy />);
+          instance.constructor.something = 10;
+        });
 
-      //   renderer.render(<Proxy />);
-      //   expect(renderer.getRenderOutput().props.children).toEqual(42);
+        it('gets added', () => {
+          const proxy = createProxy(StaticDescriptorRemoval);
+          const Proxy = proxy.get();
+          const instance = renderer.render(<Proxy />);
 
-      //   proxy.update(StaticMethodUpdate);
-      //   renderer.render(<Proxy />);
+          proxy.update(StaticDescriptor);
+          instance.constructor.something = 10;
+          expect(instance.constructor._something).toEqual(20);
+        });
 
-      //   expect(renderer.getRenderOutput().props.children).toEqual(43);
-      //   expect(Proxy.getAnswer()).toEqual(43);
-      //   expect(getAnswer()).toEqual(42);
-      // });
+        it('gets replaced', () => {
+          const proxy = createProxy(StaticDescriptor);
+          const Proxy = proxy.get();
+          const instance = renderer.render(<Proxy />);
+          instance.constructor.something = 10;
+          expect(instance.constructor._something).toEqual(20);
 
-      // it('is detached if deleted', () => {
-      //   const proxy = createProxy(StaticMethod);
-      //   const Proxy = proxy.get();
-      //   const instance = renderer.render(<Proxy />);
-      //   expect(renderer.getRenderOutput().props.children).toEqual(42);
-      //   expect(Proxy.getAnswer()).toEqual(42);
+          proxy.update(StaticDescriptorUpdate);
+          expect(instance.constructor._something).toEqual(20);
+          instance.constructor.something = 10;
+          expect(instance.constructor._something).toEqual(30);
 
-      //   proxy.update(StaticMethodRemoval);
-      //   expect(() => instance.forceUpdate()).toThrow();
-      //   expect(() => renderer.render(<Proxy />)).toThrow();
-      //   expect(Proxy.getAnswer).toEqual(undefined);
-      // });
+          proxy.update(StaticDescriptorRemoval);
+          expect(instance.constructor._something).toEqual(30);
+          instance.constructor.something = 7;
+          expect(instance.constructor.something).toEqual(7);
+          expect(instance.constructor._something).toEqual(30);
+        });
+
+        it('gets redefined', () => {
+          const proxy = createProxy(StaticDescriptor);
+          const Proxy = proxy.get();
+          const instance = renderer.render(<Proxy />);
+          expect(renderer.getRenderOutput().props.children).toEqual(42);
+
+          Object.defineProperty(instance.constructor, 'something', {
+            value: 50
+          });
+
+          proxy.update(StaticDescriptorUpdate);
+          expect(instance.constructor.something).toEqual(50);
+        });
+      });
     });
   });
 });

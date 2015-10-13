@@ -1,13 +1,16 @@
+import autobind from 'autobind-decorator';
+
 const ownKeys = obj => Object.getOwnPropertyNames(obj).concat(Object.getOwnPropertySymbols(obj));
 const getDescriptor = Object.getOwnPropertyDescriptor;
 const noop = () => null;
 
+@autobind
 export default class ObservableObject {
 	on(event, handler) {
 		this.handlers[event] = handler;
 	}
 	emit(event, ...args) {
-		return this.handlers[event].call(this, ...args);
+		return this.handlers[event].call(this.context, ...args);
 	}
 	createGetter(key, descriptor) {
 		return () => {
@@ -19,7 +22,7 @@ export default class ObservableObject {
 			return this.emit('set', key, value, descriptor);
 		};
 	}
-	defineObservable({key, descriptor}, target = this) {
+	defineObservable({key, descriptor}, target) {
 
 		if (!this.isObservable(descriptor)) {
 			return Object.defineProperty(target, key, descriptor);
@@ -31,12 +34,14 @@ export default class ObservableObject {
 		return Object.defineProperty(target, key, {
 			enumerable: descriptor.enumerable,
 			get, set
-		});
+		}, true);
 	}
 	isObservable({configurable}) {
 		return configurable;
 	}
-	constructor(object, mutate) {
+	constructor(object) {
+
+		this.context = object;
 
 		ownKeys(object)
 			.map(key => ({
@@ -44,8 +49,7 @@ export default class ObservableObject {
 				descriptor: getDescriptor(object, key)
 			}))
 			.forEach(prop => {
-				const target = mutate ? object : this;
-				this.defineObservable(prop, target);
+				this.defineObservable(prop, object);
 			});
 	}
 

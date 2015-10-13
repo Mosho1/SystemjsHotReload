@@ -1,7 +1,7 @@
 import {cloneInto} from './utils';
 import autobind from 'autobind-decorator';
 import ObservableObject from './observable-object.js';
-
+import EE from 'eventemitter3';
 const noop = x => x;
 const ownKeys = obj => Object.getOwnPropertyNames(obj).concat(Object.getOwnPropertySymbols(obj));
 const getDescriptor = Object.getOwnPropertyDescriptor;
@@ -24,19 +24,19 @@ const propCache = Symbol('propCache');
 const constructor = Symbol('constructor');
 const reactProxy = Symbol('reactProxy');
 const originalFn = Symbol('original unbound fn');
+
+const emitter = new EE();
+const defProp = Object.defineProperty;
+Object.defineProperty = (...args) => {
+	emitter.emit('Object.defineProperty', args);
+	return defProp(...args);
+};
+
 const protoBind = Function.prototype.bind;
 Function.prototype.bind = function(...args) {
 	const bound = protoBind.apply(this, args);
-	bound[originalFn] = this;
+	defProp(bound, originalFn, {value: this});
 	return bound;
-};
-
-const defProp = Object.defineProperty;
-Object.defineProperty = (context, key, descriptor, noCache) => {
-	if (context[propCache] && !noCache) {
-		context[propCache][key] = {dirty: true};
-	}
-	return defProp(context, key, descriptor);
 };
 
 const defineProxyProp = (obj, desc) => defProp(obj, reactProxy, desc || {value: true});
@@ -190,7 +190,7 @@ export class Proxy {
 		this.proxied.prototype.instances = this.instances = Component.prototype.instances || new Set();
 		this.wrapLifestyleMethods(this.proxied.prototype);
 
-		this.proxied[propCache] = {...this.proxied};
+		this[propCache] = {...this.proxied};
 
 		if (!this.proxied.hasOwnProperty(propCache)) {
 			defProp(this.proxied, propCache, {
@@ -202,6 +202,11 @@ export class Proxy {
 		this.update(Component);
 
 		defineProxyProp(this.proxied, {value: this});
+		emitter.on('Object.defineProperty', ([context, key, descriptor, noCache]) => {
+			if (context === this.proxied && !noCache) {
+				this[propCache][key] = {dirty: true};
+			}
+		});
 	}
 
 	wrapLifestyleMethods(component) {
@@ -291,42 +296,49 @@ export class Proxy {
 		this.proxied.prototype.instances = this.instances = instances;
 		instances.forEach(instance => this.updateInstance(instance, Component));
 
+
 		cloneInto(this.proxied, Component, {
 			exclude: ['type', propCache, reactProxy],
 			// enumerableOnly: true,
 			shouldDefine: (k, target) => {
-				const cache = target[propCache][k];
+				const cached = this[propCache][k];
 				const isProxy = target.hasOwnProperty(reactProxy);
-				if (isProxy && cache && cache.dirty) {
+				if (isProxy && cached && cached.dirty) {
 					return false;
 				}
 			},
 			shouldDelete: (k, target) => {
-				const cache = target[propCache][k];
-				if (!cache || (cache && cache.dirty)) {
+				const cached = this[propCache][k];
+				if (!cached || (cached && cached.dirty)) {
 					return false;
 				}
 			}
 		});
 
-		this[constructor] = Component;
+		const oldCache = this[propCache];
+
+		let cache = ownKeys(this.proxied)
+			.reduce((acc, k) =>
+				(acc[k] = {
+					value: this.proxied[k],
+					dirty: oldCache[k] && oldCache[k].dirty
+				}, acc), {});
 
 		if (Component[propCache]) {
-			this.proxied[propCache] = Object.assign(this.proxied[propCache] || {}, Component[propCache]);
+			cache = Object.assign(cache || {}, Component[propCache]);
 		}
 
-		const cache = ownKeys(this.proxied).reduce((acc, k) => (acc[k] = {value: this.proxied[k]}, acc), {});
-		const observableObject = new ObservableObject(this.proxied, true);
-		observableObject.on('get', function(key, descriptor) {
-			return cache[key].value;
-		});
-		console.log(this.proxied.getAnswer)
-		observableObject.on('set', (key, value, descriptor) => {
-			let set, oldSet = descriptor.set;
-			if (oldSet && oldSet[reactProxy]) {
-				set = oldSet;
-			} else {
-				set = oldSet
+		this[propCache] = cache;
+
+		this[constructor] = Component;
+
+		const observableObject = new ObservableObject(this.proxied);
+
+		const get = key => this[propCache][key].value;
+
+		const set = function(key, value, descriptor) {
+			let oldSet = descriptor.set;
+			let doSet = oldSet
 					? function(v) {
 						cache[key].value = oldSet.call(this, v);
 					}
@@ -339,9 +351,11 @@ export class Proxy {
 						cache[key].dirty = newValue !== oldValue;
 						cache[key].value = newValue;
 					};
-			}
-			set(value);
-		});
+			doSet.call(this, value);
+		};
+
+		observableObject.on('get', get);
+		observableObject.on('set', set);
 
 		this.wrapLifestyleMethods(this.proxied.prototype);
 		this.proxied.prototype.constructor = this.proxied;
