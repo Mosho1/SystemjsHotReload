@@ -1,8 +1,6 @@
 import {cloneInto} from './utils';
 import autobind from 'autobind-decorator';
-// import {bindAutoBindMethod} from './bindAutoBindMethods';
-// import deleteUnknownAutoBindMethods from './deleteUnknownAutoBindMethods';
-import React from 'react';
+import ObservableObject from './observable-object.js';
 
 const noop = x => x;
 const ownKeys = obj => Object.getOwnPropertyNames(obj).concat(Object.getOwnPropertySymbols(obj));
@@ -317,57 +315,32 @@ export class Proxy {
 			this.proxied[propCache] = Object.assign(this.proxied[propCache] || {}, Component[propCache]);
 		}
 
-		ownKeys(this.proxied).forEach(k => {
-			const descriptor = getDescriptor(this.proxied, k);
-
-			if (!descriptor.configurable || k === propCache) {
-				return;
-			}
-
-			const cached = this.proxied[propCache][k];
-			const {get: oldGet, set: oldSet, value} = descriptor;
-
-			let initialValue;
-			if (descriptor.hasOwnProperty('value')) {
-				initialValue = value;
-			} else if (oldGet) {
-				initialValue = oldGet.call(this.proxied);
-			}
-			this.proxied[propCache][k] = {
-				value: initialValue,
-				dirty: cached && cached.dirty
-			};
-
-
-			const get = function() {
-				return this[propCache][k].value;
-			};
-
-			let set;
+		const cache = ownKeys(this.proxied).reduce((acc, k) => (acc[k] = {value: this.proxied[k]}, acc), {});
+		const observableObject = new ObservableObject(this.proxied, true);
+		observableObject.on('get', function(key, descriptor) {
+			return cache[key].value;
+		});
+		console.log(this.proxied.getAnswer)
+		observableObject.on('set', (key, value, descriptor) => {
+			let set, oldSet = descriptor.set;
 			if (oldSet && oldSet[reactProxy]) {
 				set = oldSet;
 			} else {
 				set = oldSet
 					? function(v) {
-						this[propCache][k].value = oldSet.call(this, v);
+						cache[key].value = oldSet.call(this, v);
 					}
 					: function(v) {
 						const origFn = v[originalFn];
-						const oldValue = this[propCache][k].value;
+						const oldValue = cache[key].value;
 						const newValue = origFn
 								? v[originalFn]
 								: v;
-						this[propCache][k].dirty = newValue !== oldValue;
-						this[propCache][k].value = newValue;
+						cache[key].dirty = newValue !== oldValue;
+						cache[key].value = newValue;
 					};
 			}
-
-			set[reactProxy] = get[reactProxy] = true;
-
-			defProp(this.proxied, k, {
-				enumerable: descriptor.enumerable,
-				get, set
-			});
+			set(value);
 		});
 
 		this.wrapLifestyleMethods(this.proxied.prototype);

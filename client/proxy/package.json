@@ -5,7 +5,7 @@
   "main": "modules/index.js",
   "scripts": {
     "test": "mocha --compilers js:babel/register ./test/atest.js --watch",
-    "regtest": "mocha --compilers js:babel/register ./test"
+    "regtest": "mocha --compilers js:babel/register ./test --watch"
   },
   "repository": {
     "type": "git",
