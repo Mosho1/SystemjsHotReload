@@ -6,14 +6,13 @@ export const cloneInto = (target, source, {mutate = true, exclude = [], onDefine
 
 	let returnTarget = target;
 
-
 	const getKeys = enumerableOnly ? Object.keys : Reflect.ownKeys;
 	const propertyNames = new Set(getKeys(target).concat(getKeys(source)));
-
 	if (!mutate) {
 		returnTarget = [...propertyNames].reduce((acc, k) => (acc[k] = target[k], acc), {});
 	}
 	propertyNames.forEach(k => {
+
 		if (exclude.includes(k)) {
 			return;
 		}
@@ -37,6 +36,7 @@ export const cloneInto = (target, source, {mutate = true, exclude = [], onDefine
 			&& (!targetDescriptor || targetDescriptor.configurable)
 			&& shouldDefine(k, target, source) !== false) {
 			const descriptor = onDefine ? onDefine(k, target, source) : sourceDescriptor;
+
 			Object.defineProperty(returnTarget, k, descriptor, true);
 		}
 	});

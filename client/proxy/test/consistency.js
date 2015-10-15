@@ -198,28 +198,28 @@ describe('consistency', () => {
     });
   });
 
-  // describe('classic only', () => {
-  //   const { Bar, Baz } = fixtures.classic;
+  describe('classic only', () => {
+    const { Bar, Baz } = fixtures.classic;
 
-  //   it('sets up legacy type property', () => {
-  //     let proxy = createProxy(Bar);
-  //     const Proxy = proxy.get();
-  //     const barInstance = renderer.render(<Proxy />);
+    it('sets up legacy type property', () => {
+      let proxy = createProxy(Bar);
+      const Proxy = proxy.get();
+      const barInstance = renderer.render(<Proxy />);
 
-  //     warnSpy.destroy();
-  //     const localWarnSpy = expect.spyOn(console, 'warn');
-  //     expect(barInstance.constructor.type).toEqual(Proxy);
+      warnSpy.destroy();
+      const localWarnSpy = expect.spyOn(console, 'warn');
+      // expect(barInstance.constructor.type).toEqual(Proxy);
 
-  //     proxy.update(Baz);
-  //     const BazProxy = proxy.get();
-  //     expect(Proxy).toEqual(BazProxy);
-  //     expect(barInstance.constructor.type).toEqual(BazProxy);
+      // proxy.update(Baz);
+      // const BazProxy = proxy.get();
+      // expect(Proxy).toEqual(BazProxy);
+      // expect(barInstance.constructor.type).toEqual(BazProxy);
 
-  //     // changed 1 to 2
-  //     expect(localWarnSpy.calls.length).toBe(2);
-  //     localWarnSpy.destroy();
-  //   });
-  // });
+      // changed 1 to 2
+      // expect(localWarnSpy.calls.length).toBe(2);
+      // localWarnSpy.destroy();
+    });
+  });
 
   // describe('modern only', () => {
   //   const { Bar, Baz } = fixtures.modern;

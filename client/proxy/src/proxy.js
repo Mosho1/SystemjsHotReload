@@ -1,6 +1,7 @@
 import {cloneInto} from './utils';
 import autobind from 'autobind-decorator';
 import ObservableObject from './observable-object.js';
+import FlatObject from './flat-object.js';
 import EE from 'eventemitter3';
 const noop = x => x;
 const ownKeys = obj => Object.getOwnPropertyNames(obj).concat(Object.getOwnPropertySymbols(obj));
@@ -18,12 +19,15 @@ const propDefaults = {
 	writable: true
 };
 
-const getProp = (obj, prop) => obj && obj[prop];
+const getProp = (obj, prop, defaultValue) =>
+	Array.isArray(prop)
+		? (prop.reduce((cur, p) => cur && cur[p], obj) || defaultValue)
+		: ((obj && obj[prop]) || defaultValue);
 
 const propCache = Symbol('propCache');
 const constructor = Symbol('constructor');
 const reactProxy = Symbol('reactProxy');
-const originalFn = Symbol('original unbound fn');
+const originalFn = global.origFn = Symbol('original unbound fn');
 
 const emitter = new EE();
 const defProp = Object.defineProperty;
@@ -41,34 +45,11 @@ Function.prototype.bind = function(...args) {
 
 const defineProxyProp = (obj, desc) => defProp(obj, reactProxy, desc || {value: true});
 
-const flattenPrototypes = (obj, exclude) => {
-	const proto = Object.getPrototypeOf(obj);
-
-	if (!proto) {
-		return null;
-	}
-
-	const flattened = flattenPrototypes(proto, exclude) || obj;
-	let keys = ownKeys(flattened);
-
-	obj = keys.filter(k => !exclude.includes(k)).reduce((o, k) => {
-		const protoDescriptor = getDescriptor(flattened, k);
-		const ownDescriptor = getDescriptor(o, k);
-		if (!ownDescriptor) {
-			defProp(o, k, protoDescriptor);
-		}
-		return o;
-	}, obj);
-
-	// Object.setPrototypeOf(obj, proto);
-
-	return obj;
-};
-
 // const curry = (fn, boundArgs) => (...args) => {
 // 	args = boundArgs.concat(args);
 // 	return fn(...args);
 // };
+
 
 const controlledObject = (object, instance) => {
 
@@ -86,7 +67,7 @@ const controlledObject = (object, instance) => {
 		}
 
 		cachedProp.context = instance;
-		cachedProp.value = cachedProp.prop.value;
+		cachedProp.value = getProp(cachedProp.prop.value, originalFn, cachedProp.prop.value);
 		cachedProp.wasSet = false;
 
 		cachedProp.getter = cachedProp.getter || function() {
@@ -186,7 +167,7 @@ export class Proxy {
 			return instance;
 		};
 
-	    cloneInto(this.proxied.prototype, Component.prototype);
+		cloneInto(this.proxied.prototype, Component.prototype);
 		this.proxied.prototype.instances = this.instances = Component.prototype.instances || new Set();
 		this.wrapLifestyleMethods(this.proxied.prototype);
 
@@ -237,7 +218,6 @@ export class Proxy {
 	}
 
 	updateInstance(instance = {}, Component = this[constructor]) {
-
 		const {instances} = this;
 
 		const newInstance = new Component(instance.props);
@@ -246,8 +226,7 @@ export class Proxy {
 		}
 
 		const exclude = objectProtoKeys.concat(deprecated);
-
-		const flattened = flattenPrototypes(newInstance, exclude);
+		const flattened = new FlatObject(newInstance, exclude);
 
 		this.wrapLifestyleMethods(flattened);
 
@@ -279,7 +258,6 @@ export class Proxy {
 		cloneInto(instance, flattened, {
 			exclude: internals.concat(namesToExclude),
 			noDelete: true,
-			enumerableOnly: true,
 			onDelete(k, target) {
 				deleteFromControlledOnbject(target, k);
 			}
@@ -290,12 +268,10 @@ export class Proxy {
 
 	update(Component) {
 		const {instances} = this;
-		const exclude = objectProtoKeys.concat(deprecated).concat('arguments', 'caller');
-		Component = flattenPrototypes(Component, exclude);
+		const exclude = objectProtoKeys.concat(deprecated).concat('arguments', 'caller', 'prototype');
 		cloneInto(this.proxied.prototype, Component.prototype);
 		this.proxied.prototype.instances = this.instances = instances;
 		instances.forEach(instance => this.updateInstance(instance, Component));
-
 
 		cloneInto(this.proxied, Component, {
 			exclude: ['type', propCache, reactProxy],
@@ -315,6 +291,7 @@ export class Proxy {
 			}
 		});
 
+console.log(this.proxied.getY)
 		const oldCache = this[propCache];
 
 		let cache = ownKeys(this.proxied)
@@ -354,8 +331,9 @@ export class Proxy {
 			doSet.call(this, value);
 		};
 
-		observableObject.on('get', get);
-		observableObject.on('set', set);
+		observableObject
+			.on('get', get)
+			.on('set', set);
 
 		this.wrapLifestyleMethods(this.proxied.prototype);
 		this.proxied.prototype.constructor = this.proxied;

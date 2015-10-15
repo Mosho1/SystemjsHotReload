@@ -6,22 +6,28 @@ const noop = () => null;
 
 @autobind
 export default class ObservableObject {
+
 	on(event, handler) {
 		this.handlers[event] = handler;
+		return this;
 	}
+
 	emit(event, ...args) {
 		return this.handlers[event].call(this.context, ...args);
 	}
+
 	createGetter(key, descriptor) {
 		return () => {
 			return this.emit('get', key, descriptor);
 		};
 	}
+
 	createSetter(key, descriptor) {
 		return (value) => {
 			return this.emit('set', key, value, descriptor);
 		};
 	}
+
 	defineObservable({key, descriptor}, target) {
 
 		if (!this.isObservable(descriptor)) {
@@ -30,17 +36,17 @@ export default class ObservableObject {
 
 		const get = this.createGetter(key, descriptor);
 		const set = this.createSetter(key, descriptor);
-
 		return Object.defineProperty(target, key, {
 			enumerable: descriptor.enumerable,
 			get, set
 		}, true);
 	}
+
 	isObservable({configurable}) {
 		return configurable;
 	}
-	constructor(object) {
 
+	constructor(object) {
 		this.context = object;
 
 		ownKeys(object)
