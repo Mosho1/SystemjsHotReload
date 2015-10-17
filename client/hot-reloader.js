@@ -1,6 +1,6 @@
 import React from 'react';
 import {mapValues} from './utils';
-import { createProxy, updateProxy } from './proxy/src';
+import { createProxy, updateProxy } from './proxy/src/index.js';
 
 const proxies = new Map();
 

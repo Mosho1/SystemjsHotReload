@@ -73,7 +73,6 @@ function boundMethod(target, key, descriptor) {
       if (this === target.prototype) {
         return fn;
       }
-
       let boundFn = fn.bind(this);
       Object.defineProperty(this, key, {
         value: boundFn,

@@ -69,9 +69,34 @@ describe('static descriptor', () => {
     const { StaticDescriptor, StaticDescriptorUpdate, StaticDescriptorRemoval, ThrowingAccessors } = fixtures[type];
 
     describe(type, () => {
-     
+      it('does not invoke accessors', () => {
+        const proxy = createProxy(StaticDescriptor);
+        const Proxy = proxy.get();
+        const instance = renderer.render(<Proxy />);
+        expect(() => proxy.update(ThrowingAccessors)).toNotThrow();
+      });
+
       describe('getter', () => {
-       
+        it('is available on proxy class', () => {
+          const proxy = createProxy(StaticDescriptor);
+          const Proxy = proxy.get();
+          const instance = renderer.render(<Proxy />);
+          expect(renderer.getRenderOutput().props.children).toEqual(42);
+          expect(instance.constructor.answer).toEqual(42);
+          expect(Proxy.answer).toEqual(42);
+        });
+
+        it('gets added', () => {
+          const proxy = createProxy(StaticDescriptorRemoval);
+          const Proxy = proxy.get();
+          const instance = renderer.render(<Proxy />);
+          expect(renderer.getRenderOutput().props.children).toEqual(undefined);
+
+          proxy.update(StaticDescriptor);
+          renderer.render(<Proxy />);
+          expect(renderer.getRenderOutput().props.children).toEqual(42);
+          expect(instance.constructor.answer).toEqual(42);
+        });
 
         it('gets replaced', () => {
           const proxy = createProxy(StaticDescriptor);
@@ -90,27 +115,26 @@ describe('static descriptor', () => {
           expect(instance.answer).toEqual(undefined);
         });
 
-    // it('gets redefined', () => {
-    //   const proxy = createProxy(StaticDescriptor);
-    //   const Proxy = proxy.get();
-    //   const instance = renderer.render(<Proxy />);
-    //   expect(renderer.getRenderOutput().props.children).toEqual(42);
-    //   Object.defineProperty(instance.constructor, 'answer', {
-    //     value: 7
-    //   });
+        it('gets redefined', () => {
+          const proxy = createProxy(StaticDescriptor);
+          const Proxy = proxy.get();
+          const instance = renderer.render(<Proxy />);
+          expect(renderer.getRenderOutput().props.children).toEqual(42);
 
-    //   proxy.update(StaticDescriptorUpdate);
+          Object.defineProperty(instance.constructor, 'answer', {
+            value: 7
+          });
 
-    //   renderer.render(<Proxy />);
-    //   expect(renderer.getRenderOutput().props.children).toEqual(7);
-    //   expect(instance.constructor.answer).toEqual(7);
+          proxy.update(StaticDescriptorUpdate);
+          renderer.render(<Proxy />);
+          expect(renderer.getRenderOutput().props.children).toEqual(7);
+          expect(instance.constructor.answer).toEqual(7);
 
-    //   proxy.update(StaticDescriptorRemoval);
-    //   renderer.render(<Proxy />);
-    //   expect(renderer.getRenderOutput().props.children).toEqual(7);
-    //   expect(instance.constructor.answer).toEqual(7);
-    // });
-
+          proxy.update(StaticDescriptorRemoval);
+          renderer.render(<Proxy />);
+          expect(renderer.getRenderOutput().props.children).toEqual(7);
+          expect(instance.constructor.answer).toEqual(7);
+        });
       });
 
       describe('setter', () => {
@@ -150,21 +174,19 @@ describe('static descriptor', () => {
           expect(instance.constructor._something).toEqual(30);
         });
 
-        // it('gets redefined', () => {
-        //   const proxy = createProxy(StaticDescriptor);
-        //   const Proxy = proxy.get();
-        //   const instance = renderer.render(<Proxy />);
-        //   expect(renderer.getRenderOutput().props.children).toEqual(42);
+        it('gets redefined', () => {
+          const proxy = createProxy(StaticDescriptor);
+          const Proxy = proxy.get();
+          const instance = renderer.render(<Proxy />);
+          expect(renderer.getRenderOutput().props.children).toEqual(42);
 
-        //   Object.defineProperty(instance.constructor, 'something', {
-        //     value: 50
-        //   });
+          Object.defineProperty(instance.constructor, 'something', {
+            value: 50
+          });
 
-        //   console.log('wat',instance.constructor.something)
-
-        //   proxy.update(StaticDescriptorUpdate);
-        //   expect(instance.constructor.something).toEqual(50);
-        // });
+          proxy.update(StaticDescriptorUpdate);
+          expect(instance.constructor.something).toEqual(50);
+        });
       });
     });
   });

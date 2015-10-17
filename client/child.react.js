@@ -5,7 +5,7 @@ export default class Child extends React.Component {
 		this.wat = props.wat + '';
 	}
 	componentWillReceiveProps(props) {
-		this.wat = props.wat + '';
+		this.wat = props.wat + 'awaaaaad';
 	}
 	render() {
 		return <div>{this.wat + 'www'}</div>;
