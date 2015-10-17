@@ -3,9 +3,7 @@
 const noop = () => null;
 
 export const cloneInto = (target, source, {mutate = true, exclude = [], onDefine, noDelete = false, enumerableOnly = false, onDelete, shouldDelete = noop, shouldDefine = noop} = {}) => {
-
 	let returnTarget = target;
-
 	const getKeys = enumerableOnly ? Object.keys : Reflect.ownKeys;
 	const propertyNames = new Set(getKeys(target).concat(getKeys(source)));
 	if (!mutate) {
@@ -28,7 +26,7 @@ export const cloneInto = (target, source, {mutate = true, exclude = [], onDefine
 				onDelete(k, target, source);
 			}
 			if (noDelete !== true) {
-				Reflect.deleteProperty(target, k);
+				delete target[k];
 			}
 
 		}
@@ -36,7 +34,6 @@ export const cloneInto = (target, source, {mutate = true, exclude = [], onDefine
 			&& (!targetDescriptor || targetDescriptor.configurable)
 			&& shouldDefine(k, target, source) !== false) {
 			const descriptor = onDefine ? onDefine(k, target, source) : sourceDescriptor;
-
 			Object.defineProperty(returnTarget, k, descriptor, true);
 		}
 	});

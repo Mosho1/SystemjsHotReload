@@ -194,6 +194,26 @@ describe('autobound instance method', () => {
     });
   });
 
+describe('modern only', () => {
+    const { Counter1x, Counter10x, Counter100x } = fixtures.modern;
 
+    /**
+     * There's nothing we can do here.
+     * You can't use a lazy autobind with hot reloading
+     * and expect function reference equality.
+     */
+    it('fixed! preserves the reference (was a known limitation)', () => {
+      const proxy = createProxy(Counter1x);
+      const Proxy = proxy.get();
+      const instance = renderer.render(<Proxy />);
+      const savedIncrement = instance.increment;
+
+      proxy.update(Counter10x);
+      expect(instance.increment).toBe(savedIncrement);
+
+      proxy.update(Counter100x);
+      expect(instance.increment).toBe(savedIncrement);
+    });
+  });
   
 });

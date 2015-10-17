@@ -1,39 +1,85 @@
 import React, { Component } from 'react';
 import createShallowRenderer from './helpers/createShallowRenderer';
 import expect from 'expect';
-import { createProxy, getForceUpdate } from '../src';
+import { createProxy } from '../src';
 
-class Base1 {
-  static getY() {
-    return 42;
+const fixtures = {
+  modern: {
+    Bar: class Bar {
+      componentWillUnmount() {
+        this.didUnmount = true;
+      }
+
+      doNothing() {
+      }
+
+      render() {
+        return <div>Bar</div>;
+      }
+    },
+
+    Baz: class Baz {
+      componentWillUnmount() {
+        this.didUnmount = true;
+      }
+
+      render() {
+        return <div>Baz</div>;
+      }
+    },
+
+    Foo: class Foo {
+      static displayName = 'Foo (Custom)';
+
+      componentWillUnmount() {
+        this.didUnmount = true;
+      }
+
+      render() {
+        return <div>Foo</div>;
+      }
+    }
+  },
+
+  classic: {
+    Bar: React.createClass({
+      componentWillUnmount() {
+        this.didUnmount = true;
+      },
+
+      doNothing() {
+      },
+
+      render() {
+        return <div>Bar</div>;
+      }
+    }),
+
+    Baz: React.createClass({
+      componentWillUnmount() {
+        this.didUnmount = true;
+      },
+
+      render() {
+        return <div>Baz</div>;
+      }
+    }),
+
+    Foo: React.createClass({
+      displayName: 'Foo (Custom)',
+
+      componentWillUnmount() {
+        this.didUnmount = true;
+      },
+
+      render() {
+        return <div>Foo</div>;
+      }
+    })
   }
+};
 
-  getX() {
-    return 42;
-  }
-
-  render() {
-    return this.actuallyRender();
-  }
-}
-
-class Base2 {
-  static getY() {
-    return 43;
-  }
-
-  getX() {
-    return 43;
-  }
-
-  render() {
-    return this.actuallyRender();
-  }
-}
-
-describe('inheritance', () => {
-  const forceUpdate = getForceUpdate(React);;
-
+describe('consistency', () => {
   let renderer;
   let warnSpy;
 
@@ -47,287 +93,160 @@ describe('inheritance', () => {
     expect(warnSpy.calls.length).toBe(0);
   });
 
+  Object.keys(fixtures).forEach(type => {
+    describe(type, () => {
+      // if (type!=='modern')return;
+      const { Bar, Baz, Foo } = fixtures[type];
+
+      it('does not overwrite the original class', () => {
+        const proxy = createProxy(Bar);
+        const Proxy = proxy.get();
+        const barInstance = renderer.render(<Proxy />);
+        expect(renderer.getRenderOutput().props.children).toEqual('Bar');
+
+        proxy.update(Baz);
+        const realBarInstance = renderer.render(<Bar />);
+        expect(renderer.getRenderOutput().props.children).toEqual('Bar');
+        expect(barInstance).toNotEqual(realBarInstance);
+        // expect(barInstance.didUnmount).toEqual(true);
+      });
+
+      it('returns an existing proxy when wrapped twice', () => {
+        const proxy = createProxy(Bar);
+        const Proxy = proxy.get();
+        const proxyTwice = createProxy(Proxy);
+
+        expect(proxyTwice).toBe(proxy);
+      });
+
+      it('prevents recursive proxy cycle', () => {
+        const proxy = createProxy(Bar);
+        const Proxy = proxy.get();
+        proxy.update(Proxy);
+        expect(proxy.get()).toEqual(Proxy);
+      });
+
+      it('prevents mutually recursive proxy cycle', () => {
+        const barProxy = createProxy(Bar);
+        const BarProxy = barProxy.get();
+
+        const fooProxy = createProxy(Foo);
+        const FooProxy = fooProxy.get();
+
+        barProxy.update(FooProxy);
+        fooProxy.update(BarProxy);
+      });
+
+      it('sets up constructor to match the type', () => {
+        let proxy = createProxy(Bar);
+        const BarProxy = proxy.get();
+        const barInstance = renderer.render(<BarProxy />);
+        expect(barInstance.constructor).toEqual(BarProxy);
+        expect(barInstance instanceof BarProxy).toEqual(true);
+
+        proxy.update(Baz);
+        const BazProxy = proxy.get();
+        expect(BarProxy).toEqual(BazProxy);
+        expect(barInstance.constructor).toEqual(BazProxy);
+        expect(barInstance instanceof BazProxy).toEqual(true);
+      });
+
+      it('keeps own methods on the prototype', () => {
+        let proxy = createProxy(Bar);
+        const Proxy = proxy.get();
+        const propertyNames = Object.getOwnPropertyNames(Proxy.prototype);
+        expect(propertyNames).toInclude('doNothing');
+      });
+
+      it('preserves enumerability and writability of methods', () => {
+        let proxy = createProxy(Bar);
+        const Proxy = proxy.get();
+
+        // removed componentDidMount
+        ['doNothing', 'render', 'componentWillUnmount'].forEach(name => {
+          const originalDescriptor = Object.getOwnPropertyDescriptor(Bar.prototype, name);
+          const proxyDescriptor = Object.getOwnPropertyDescriptor(Proxy.prototype, name);
+          if (originalDescriptor) {
+            expect(proxyDescriptor.enumerable).toEqual(originalDescriptor.enumerable, name);
+            expect(proxyDescriptor.writable).toEqual(originalDescriptor.writable, name);
+          } else {
+            expect(proxyDescriptor.enumerable).toEqual(false, name);
+            expect(proxyDescriptor.writable).toEqual(true, name);
+          }
+        });
+      });
+
+      it('preserves toString() of methods', () => {
+        let proxy = createProxy(Bar);
+
+        const Proxy = proxy.get();
+        ['doNothing', 'render', 'constructor', 'componentWillUnmount'].forEach(name => {
+          const originalMethod = Bar.prototype[name];
+          const proxyMethod = Proxy.prototype[name];
+          expect(originalMethod.toString()).toEqual(proxyMethod.toString());
+        });
+
+        const doNothingBeforeItWasDeleted = Proxy.prototype.doNothing;
+        proxy.update(Baz);
+        ['render', 'componentWillUnmount', 'constructor'].forEach(name => {
+          const originalMethod = Baz.prototype[name];
+          const proxyMethod = Proxy.prototype[name];
+          expect(originalMethod.toString()).toEqual(proxyMethod.toString());
+        });
+        // expect(doNothingBeforeItWasDeleted.toString()).toEqual('<method was deleted>');
+      });
+    });
+  });
+
+  describe('classic only', () => {
+    const { Bar, Baz } = fixtures.classic;
+
+    it('sets up legacy type property', () => {
+      let proxy = createProxy(Bar);
+      const Proxy = proxy.get();
+      const barInstance = renderer.render(<Proxy />);
+
+      warnSpy.destroy();
+      const localWarnSpy = expect.spyOn(console, 'warn');
+      expect(barInstance.constructor.type).toEqual(Proxy);
+
+      proxy.update(Baz);
+      const BazProxy = proxy.get();
+      expect(Proxy).toEqual(BazProxy);
+      expect(barInstance.constructor.type).toEqual(BazProxy);
+
+      // changed 1 to 0
+      expect(localWarnSpy.calls.length).toBe(0);
+      localWarnSpy.destroy();
+    });
+  });
+
   describe('modern only', () => {
-    // it('replaces a base instance method with proxied base and derived', () => {
-    //   const baseProxy = createProxy(Base1);
-    //   const BaseProxy = baseProxy.get();
-    //   class Derived extends BaseProxy {
-    //     actuallyRender() {
-    //       return <span>{super.getX() * 10}</span>;
-    //     }
-    //   }
+    const { Bar, Baz } = fixtures.modern;
 
-    //   const derivedProxy = createProxy(Derived);
-    //   const DerivedProxy = derivedProxy.get();
+    it('sets up the constructor name from initial name', () => {
+      let proxy = createProxy(Bar);
+      const Proxy = proxy.get();
+      expect(Proxy.name).toEqual('Bar');
 
-    //   const instance = renderer.render(<DerivedProxy />);
-    //   expect(renderer.getRenderOutput().props.children).toEqual(420);
-
-    //   baseProxy.update(Base2).forEach(forceUpdate);
-    //   expect(renderer.getRenderOutput().props.children).toEqual(430);
-    // });
-
-    it('replaces a base static method with proxied base and derived', () => {
-      const baseProxy = createProxy(Base1);
-      const BaseProxy = baseProxy.get();
-
-      class Derived extends BaseProxy {
-        actuallyRender() {
-          return <span>{this.constructor.getY() * 10}</span>;
-        }
-      }
-      const derivedProxy = createProxy(Derived);
-      const DerivedProxy = derivedProxy.get();
-
-      const instance = renderer.render(<DerivedProxy />);
-      // expect(renderer.getRenderOutput().props.children).toEqual(420);
-
-      // baseProxy.update(Base2).forEach(forceUpdate);
-      // expect(renderer.getRenderOutput().props.children).toEqual(430);
+      // solved! Known limitation: name can't change
+      proxy.update(Baz);
+      expect(Proxy.name).toEqual('Baz');
     });
 
-    // it('replaces a base instance method with proxied base only', () => {
-    //   const baseProxy = createProxy(Base1);
-    //   const BaseProxy = baseProxy.get();
-
-    //   class Derived extends BaseProxy {
-    //     actuallyRender() {
-    //       return <span>{super.getX() * 10}</span>;
-    //     }
-    //   }
-
-    //   const instance = renderer.render(<Derived />);
-    //   expect(renderer.getRenderOutput().props.children).toEqual(420);
-
-    //   baseProxy.update(Base2).forEach(forceUpdate);
-    //   expect(renderer.getRenderOutput().props.children).toEqual(430);
-    // });
-
-    // it('replaces a base static method with proxied base only', () => {
-    //   const baseProxy = createProxy(Base1);
-    //   const BaseProxy = baseProxy.get();
-
-    //   class Derived extends BaseProxy {
-    //     actuallyRender() {
-    //       return <span>{this.constructor.getY() * 10}</span>;
-    //     }
-    //   }
-
-    //   const instance = renderer.render(<Derived />);
-    //   expect(renderer.getRenderOutput().props.children).toEqual(420);
-
-    //   baseProxy.update(Base2).forEach(forceUpdate);
-    //   expect(renderer.getRenderOutput().props.children).toEqual(430);
-    // });
-
-    // it('replaces a derived instance method with proxied base and derived', () => {
-    //   const baseProxy = createProxy(Base1);
-    //   const BaseProxy = baseProxy.get();
-
-    //   class Derived1 extends BaseProxy {
-    //     actuallyRender() {
-    //       return <span>{super.getX() * 10}</span>;
-    //     }
-    //   }
-
-    //   class Derived2 extends BaseProxy {
-    //     actuallyRender() {
-    //       return <span>{super.getX() * 100}</span>;
-    //     }
-    //   }
-
-    //   const derivedProxy = createProxy(Derived1);
-    //   const DerivedProxy = derivedProxy.get();
-
-    //   const instance = renderer.render(<DerivedProxy />);
-    //   expect(renderer.getRenderOutput().props.children).toEqual(420);
-
-    //   derivedProxy.update(Derived2).forEach(forceUpdate);
-    //   expect(renderer.getRenderOutput().props.children).toEqual(4200);
-    // });
-
-    // it('replaces a derived static method with proxied base and derived', () => {
-    //   const baseProxy = createProxy(Base1);
-    //   const BaseProxy = baseProxy.get();
-
-    //   class Derived1 extends BaseProxy {
-    //     actuallyRender() {
-    //       return <span>{this.constructor.getY() * 10}</span>;
-    //     }
-    //   }
-
-    //   class Derived2 extends BaseProxy {
-    //     actuallyRender() {
-    //       return <span>{this.constructor.getY() * 100}</span>;
-    //     }
-    //   }
-
-    //   const derivedProxy = createProxy(Derived1);
-    //   const DerivedProxy = derivedProxy.get();
-
-    //   const instance = renderer.render(<DerivedProxy />);
-    //   expect(renderer.getRenderOutput().props.children).toEqual(420);
-
-    //   derivedProxy.update(Derived2).forEach(forceUpdate);
-    //   expect(renderer.getRenderOutput().props.children).toEqual(4200);
-    // });
-
-    // it('replaces a derived instance method with proxied derived only', () => {
-    //   class Derived1 extends Base1 {
-    //     actuallyRender() {
-    //       return <span>{super.getX() * 10}</span>;
-    //     }
-    //   }
-
-    //   class Derived2 extends Base1 {
-    //     actuallyRender() {
-    //       return <span>{super.getX() * 100}</span>;
-    //     }
-    //   }
-
-    //   const derivedProxy = createProxy(Derived1);
-    //   const DerivedProxy = derivedProxy.get();
-
-    //   const instance = renderer.render(<DerivedProxy />);
-    //   expect(renderer.getRenderOutput().props.children).toEqual(420);
-
-    //   derivedProxy.update(Derived2).forEach(forceUpdate);
-    //   expect(renderer.getRenderOutput().props.children).toEqual(4200);
-    // });
-
-    // it('replaces a derived static method with proxied derived only', () => {
-    //   class Derived1 extends Base1 {
-    //     actuallyRender() {
-    //       return <span>{this.constructor.getY() * 10}</span>;
-    //     }
-    //   }
-
-    //   class Derived2 extends Base1 {
-    //     actuallyRender() {
-    //       return <span>{this.constructor.getY() * 100}</span>;
-    //     }
-    //   }
-
-    //   const derivedProxy = createProxy(Derived1);
-    //   const DerivedProxy = derivedProxy.get();
-
-    //   const instance = renderer.render(<DerivedProxy />);
-    //   expect(renderer.getRenderOutput().props.children).toEqual(420);
-
-    //   derivedProxy.update(Derived2).forEach(forceUpdate);
-    //   expect(renderer.getRenderOutput().props.children).toEqual(4200);
-    // });
-
-    // it('replaces any instance method with proxied base, middle and derived', () => {
-    //   const baseProxy = createProxy(Base1);
-    //   const BaseProxy = baseProxy.get();
-
-    //   class Middle1 extends BaseProxy {
-    //     actuallyRender() {
-    //       return <span>{super.getX() * 10}</span>;
-    //     }
-    //   }
-
-    //   class Middle2 extends BaseProxy {
-    //     actuallyRender() {
-    //       return <span>{super.getX() * 100}</span>;
-    //     }
-    //   }
-
-    //   const middleProxy = createProxy(Middle1);
-    //   const MiddleProxy = middleProxy.get();
-
-    //   class Derived1 extends MiddleProxy {
-    //     render() {
-    //       return <span>{super.render().props.children + ' lol'}</span>;
-    //     }
-    //   }
-
-    //   class Derived2 extends MiddleProxy {
-    //     render() {
-    //       return <span>{super.render().props.children + ' nice'}</span>;
-    //     }
-    //   }
-
-    //   const derivedProxy = createProxy(Derived1);
-    //   const DerivedProxy = derivedProxy.get();
-
-    //   const instance = renderer.render(<DerivedProxy />);
-    //   expect(renderer.getRenderOutput().props.children).toEqual('420 lol');
-
-    //   baseProxy.update(Base2).forEach(forceUpdate);
-    //   expect(renderer.getRenderOutput().props.children).toEqual('430 lol');
-
-    //   middleProxy.update(Middle2).forEach(forceUpdate);
-    //   expect(renderer.getRenderOutput().props.children).toEqual('4300 lol');
-
-    //   derivedProxy.update(Derived2).forEach(forceUpdate);
-    //   expect(renderer.getRenderOutput().props.children).toEqual('4300 nice');
-
-    //   derivedProxy.update(Derived1).forEach(forceUpdate);
-    //   expect(renderer.getRenderOutput().props.children).toEqual('4300 lol');
-
-    //   middleProxy.update(Middle1).forEach(forceUpdate);
-    //   expect(renderer.getRenderOutput().props.children).toEqual('430 lol');
-
-    //   baseProxy.update(Base1).forEach(forceUpdate);
-    //   expect(renderer.getRenderOutput().props.children).toEqual('420 lol');
-    // });
-
-    // it('replaces any static method with proxied base, middle and derived', () => {
-    //   const baseProxy = createProxy(Base1);
-    //   const BaseProxy = baseProxy.get();
-
-    //   class Middle1 extends BaseProxy {
-    //     actuallyRender() {
-    //       return <span>{this.constructor.getY() * 10}</span>;
-    //     }
-    //   }
-
-    //   class Middle2 extends BaseProxy {
-    //     actuallyRender() {
-    //       return <span>{this.constructor.getY() * 100}</span>;
-    //     }
-    //   }
-
-    //   const middleProxy = createProxy(Middle1);
-    //   const MiddleProxy = middleProxy.get();
-
-    //   class Derived1 extends MiddleProxy {
-    //     render() {
-    //       return <span>{super.render().props.children + ' lol'}</span>;
-    //     }
-    //   }
-
-    //   class Derived2 extends MiddleProxy {
-    //     render() {
-    //       return <span>{super.render().props.children + ' nice'}</span>;
-    //     }
-    //   }
-
-    //   const derivedProxy = createProxy(Derived1);
-    //   const DerivedProxy = derivedProxy.get();
-
-    //   const instance = renderer.render(<DerivedProxy />);
-    //   expect(renderer.getRenderOutput().props.children).toEqual('420 lol');
-
-    //   baseProxy.update(Base2).forEach(forceUpdate);
-    //   expect(renderer.getRenderOutput().props.children).toEqual('430 lol');
-
-    //   middleProxy.update(Middle2).forEach(forceUpdate);
-    //   expect(renderer.getRenderOutput().props.children).toEqual('4300 lol');
-
-    //   derivedProxy.update(Derived2).forEach(forceUpdate);
-    //   expect(renderer.getRenderOutput().props.children).toEqual('4300 nice');
-
-    //   derivedProxy.update(Derived1).forEach(forceUpdate);
-    //   expect(renderer.getRenderOutput().props.children).toEqual('4300 lol');
-
-    //   middleProxy.update(Middle1).forEach(forceUpdate);
-    //   expect(renderer.getRenderOutput().props.children).toEqual('430 lol');
-
-    //   baseProxy.update(Base1).forEach(forceUpdate);
-    //   expect(renderer.getRenderOutput().props.children).toEqual('420 lol');
-    // });
+    it('should not crash if new Function() throws', () => {
+      let oldFunction = global.Function;
+      global.Function = function () { throw new Error(); }
+      try {
+        expect(() => {
+          const proxy = createProxy(Bar);
+          const Proxy = proxy.get();
+          const barInstance = renderer.render(<Proxy />);
+          expect(barInstance.constructor).toEqual(Proxy);
+        }).toNotThrow();
+      } finally {
+        global.Function = oldFunction;
+      }
+    });
   });
 });
