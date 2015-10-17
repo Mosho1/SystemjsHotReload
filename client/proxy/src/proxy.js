@@ -109,6 +109,7 @@ const controlledObject = (object, instance) => {
 
 		defineProxyProp(cachedProp.getter);
 		defineProxyProp(cachedProp.setter);
+
 		defProp(object, k, {
 			configurable: true,
 			enumerable: true,
@@ -150,11 +151,9 @@ export class Proxy {
 			return instance;
 		};
 
-		// cloneInto(this.proxied.prototype, Component.prototype);
 		this.proxied.prototype.instances = this.instances = Component.prototype.instances || new Set();
 		this.proxied.prototypeSet = this.prototypeSet = Component.prototypeSet || new Set();
 		this.prototypeSet.add(this);
-		this.wrapLifestyleMethods(this.proxied.prototype);
 
 		this[propCache] = {};
 		this.proxied[propCache] = {};
@@ -214,8 +213,8 @@ export class Proxy {
 		this.wrapLifestyleMethods(flattened);
 
 		flattened.state = instance.state || flattened.state || {};
-		flattened.props = instance.props || flattened.props || {};
-		flattened.context = instance.context || flattened.context || {};
+		// flattened.props = instance.props || flattened.props || {};
+		// flattened.context = instance.context || flattened.context || {};
 
 		controlledObject(flattened, instance);
 
@@ -226,12 +225,12 @@ export class Proxy {
 			return !hasProxySymbol;
 		});
 
-		const instanceProtoKeys = ownKeys(Object.getPrototypeOf(instance));
-		const newProtoKeys = ownKeys(Component.prototype);
-		const oldProtoKeys = ownKeys(this[constructor].prototype);
+		// const instanceProtoKeys = ownKeys(Object.getPrototypeOf(instance));
+		// const newProtoKeys = ownKeys(Component.prototype);
+		// const oldProtoKeys = ownKeys(this[constructor].prototype);
 
-		namesToExclude.push(...instanceProtoKeys.filter(k =>
-			!newProtoKeys.includes(k) && !oldProtoKeys.includes(k)));
+		// namesToExclude.push(...instanceProtoKeys.filter(k =>
+		// 	!newProtoKeys.includes(k) && !oldProtoKeys.includes(k)));
 
 		cloneInto(instance, flattened, {
 			exclude: internals.concat(namesToExclude),
@@ -263,7 +262,6 @@ export class Proxy {
 		cloneInto(this.proxied.prototype, new FlatObject(Component.prototype, exclude), {
 			exclude: ['instances']
 		});
-		// this.proxied.prototype.instances = this.instances = instances;
 
 		// update statics
 		const flatComponent = new FlatObject(Component, exclude);
@@ -301,29 +299,19 @@ export class Proxy {
 					dirty: oldCache[k] && oldCache[k].dirty
 				};
 
-				// TODO: this is a hack, should not access this.proxied[k] at all
-				try {
-					acc[k].value = this.proxied[k];
-				} catch(e) {
-
-				}
-
+				const descriptor = getDescriptor(this.proxied, k);
+				acc[k].value = descriptor.value;
+				acc[k].get = descriptor.get && descriptor.get.bind(this.proxied);
 				return acc;
 			}, {});
-
-		// if (Component[propCache]) {
-			// cache = Object.assign(cache || {}, Component[propCache]);
-		// }
-
-		this[propCache] = cache;
-
-		this[constructor] = Component;
 
 		const observableObject = new ObservableObject(this.proxied);
 
 		const get = key => {
-			const {value} = this[propCache][key];
-			return value;
+			const {value, get: getter} = cache[key];
+			return !value && typeof getter === 'function'
+				? getter()
+				: value;
 		};
 
 		const set = function(key, value, descriptor) {
@@ -351,6 +339,8 @@ export class Proxy {
 		// this.wrapLifestyleMethods(this.proxied.prototype);
 		this.proxied.prototype.constructor = this.proxied;
 		this.proxied.prototype.constructor.toString = Component.toString.bind(Component);
+
+		this[propCache] = cache;
 
 		return [...this.instances];
 	}
