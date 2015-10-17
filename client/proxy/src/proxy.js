@@ -1,10 +1,11 @@
-import {cloneInto} from './utils';
+import {cloneInto, ownKeys, getProp} from './utils';
 import autobind from 'autobind-decorator';
-import ObservableObject from './observable-object.js';
-import FlatObject from './flat-object.js';
+import ObservableObject from './observable-object';
+import FlatObject from './flat-object';
+import {controlledObject, deleteFromControlledOnbject} from './controlled-object';
+import {} from './utils';
 import EE from 'eventemitter3';
 const noop = x => x;
-const ownKeys = obj => Object.getOwnPropertyNames(obj).concat(Object.getOwnPropertySymbols(obj));
 const getDescriptor = Object.getOwnPropertyDescriptor;
 const getProto = Object.getPrototypeOf;
 
@@ -18,21 +19,23 @@ const propDefaults = {
 	writable: true
 };
 
-const getProp = (obj, prop, defaultValue) =>
-	Array.isArray(prop)
-		? (prop.reduce((cur, p) => cur && cur[p], obj) || defaultValue)
-		: ((obj && obj[prop]) || defaultValue);
-
 const propCache = Symbol('propCache');
 const constructor = Symbol('constructor');
-const reactProxy = Symbol('react proxy');
-const originalFn = global.origFn = Symbol('original unbound fn');
+// const reactProxy = Symbol('reactProxy');
+const reactProxy = '__reactProxy';
+const originalFn = '__originalFn';
+// const originalFn = Symbol('original unbound fn');
 
 const defProp = Object.defineProperty;
 
+const isReactProxy = obj =>
+	obj && obj.hasOwnProperty(reactProxy);
+
 if (!Object.defineProperty.hijacked) {
 	Object.defineProperty = (...args) => {
-		Object.emitter.emit('Object.defineProperty', args);
+		if (isReactProxy(...args)) {
+			Object.emitter.emit('Object.defineProperty', args);
+		}
 		return defProp(...args);
 	};
 }
@@ -48,97 +51,6 @@ Function.prototype.bind = function(...args) {
 };
 
 const defineProxyProp = (obj, desc) => defProp(obj, reactProxy, desc || {value: true});
-
-const controlledObject = (object, instance) => {
-
-	if (!instance.hasOwnProperty(propCache)) {
-		defProp(instance, propCache, {
-			value: {}
-		});
-	}
-
-	ownKeys(object).forEach(k => {
-		const cachedProp = instance[propCache][k] = instance[propCache][k] || {};
-		cachedProp.prop = getDescriptor(object, k);
-		if (!cachedProp.prop.configurable) {
-			return;
-		}
-
-		cachedProp.context = instance;
-		cachedProp.value = getProp(cachedProp.prop.value, originalFn, cachedProp.prop.value);
-		cachedProp.wasSet = false;
-
-		cachedProp.getter = cachedProp.getter || function() {
-
-			if (!cachedProp.prop.value && cachedProp.prop.get) {
-				const desc = getDescriptor(this, k);
-				const {get} = cachedProp.prop;
-				const got = get && get.call(this);
-				cachedProp.value = getProp(got, originalFn, got);
-				defProp(this, k, desc);
-			}
-
-			if (typeof cachedProp.value === 'function') {
-				if (!cachedProp.bound) {
-
-					cachedProp.bound = (...args) =>
-						cachedProp.value.apply(cachedProp.context, args);
-
-					defineProxyProp(cachedProp.bound);
-
-					cachedProp.bound.bind = (...args) => {
-						return cachedProp.bound;
-					};
-				}
-				return cachedProp.bound;
-			}
-			return cachedProp.value;
-		};
-
-		cachedProp.setter = cachedProp.setter || function(v) {
-			const {set} = cachedProp.prop;
-			cachedProp.wasSet = true;
-			if (cachedProp.bound === v) {
-				return;
-			}
-
-			cachedProp.value = set
-				? set.call(this, v)
-				: v;
-		};
-
-		defineProxyProp(cachedProp.getter);
-		defineProxyProp(cachedProp.setter);
-
-		defProp(object, k, {
-			configurable: true,
-			enumerable: true,
-			get: cachedProp.getter,
-			set: cachedProp.setter
-		});
-
-	});
-};
-
-const deleteFromControlledOnbject = (controlled, k) => {
-	const prop = controlled[propCache][k];
-	if (prop && prop.bound) {
-		prop.bound.call = noop;
-		prop.bound.apply = noop;
-	}
-	defProp(controlled, k, {
-		enumerable: true,
-		get() {
-			if (prop && prop.wasSet) {
-				return noop;
-			}
-		},
-		set(value) {
-			defProp(this, k, {value, ...propDefaults});
-		}
-	});
-};
-
 
 @autobind
 export class Proxy {
@@ -170,15 +82,16 @@ export class Proxy {
 		});
 	}
 
+	// adds `componentWillMount` and `componentWillUnmount` lifecycle methods
+	// (wrapping old ones if they exist). These methods will add/remove instances
+	// from a cache of all instances, that exists on the Proxy instance.
 	wrapLifestyleMethods(component) {
-
-
 		const {instances} = this;
 
 		const componentWillMount = component.componentWillMount || noop;
 		const componentWillUnmount = component.componentWillUnmount || noop;
 
-		if (component.componentWillMount && component.componentWillMount[reactProxy] === true) {
+		if (component.componentWillMount && component.componentWillMount.hasOwnProperty(reactProxy)) {
 			return;
 		}
 
@@ -201,55 +114,19 @@ export class Proxy {
 
 	}
 
-	updateInstance(instance = {}, Component = this[constructor]) {
-		const newInstance = new Component(instance.props);
-		if (newInstance.componentWillMount && !newInstance.componentWillMount[reactProxy]) {
-			newInstance.componentWillMount();
-		}
-
-		const exclude = objectProtoKeys;
-		const flattened = new FlatObject(newInstance, exclude);
-
-		this.wrapLifestyleMethods(flattened);
-
-		flattened.state = instance.state || flattened.state || {};
-		// flattened.props = instance.props || flattened.props || {};
-		// flattened.context = instance.context || flattened.context || {};
-
-		controlledObject(flattened, instance);
-
-		// for instance-descriptor tests, don't delete properties which aren't on the prototype of the Component.
-		const namesToExclude = Object.keys(instance).filter(k => {
-			const {get, set, value} = getDescriptor(instance, k);
-			const hasProxySymbol = [get, set, value].some(x => getProp(x, reactProxy));
-			return !hasProxySymbol;
-		});
-
-		// const instanceProtoKeys = ownKeys(Object.getPrototypeOf(instance));
-		// const newProtoKeys = ownKeys(Component.prototype);
-		// const oldProtoKeys = ownKeys(this[constructor].prototype);
-
-		// namesToExclude.push(...instanceProtoKeys.filter(k =>
-		// 	!newProtoKeys.includes(k) && !oldProtoKeys.includes(k)));
-
-		cloneInto(instance, flattened, {
-			exclude: internals.concat(namesToExclude),
-			noDelete: true,
-			onDelete(k, target) {
-				deleteFromControlledOnbject(target, k);
-			}
-		});
-
-		return instance;
-	}
-
 	update(Component) {
 		const instances = this.updateConstructor(Component);
 
-		this.prototypeSet.forEach(p => {
-			if (p !== this) {
-				p.updateConstructor();
-			}
+		instances.forEach(instance => {
+			// all inherited classes share the instances. we go over all of them each time any
+			// of the classes are updated, but only update instances using their current constructor
+			// if it wasn't the one directly replaced, rather one of the classes it extends
+			// was.
+			const proxyConstructor = getProp(instance, [propCache, 'proxyConstructor']);
+			const updateComponent = !proxyConstructor || (proxyConstructor === this.proxied)
+				? Component
+				: proxyConstructor;
+			this.updateInstance(instance, updateComponent);
 		});
 
 		return instances;
@@ -282,17 +159,9 @@ export class Proxy {
 			}
 		});
 
-		// update instances
-		this.instances.forEach(instance => {
-			const proxyConstructor = getProp(instance, [propCache, 'proxyConstructor']);
-			const updateComponent = !proxyConstructor || (proxyConstructor === this.proxied)
-				? Component
-				: proxyConstructor;
-			this.updateInstance(instance, updateComponent);
-		});
-
 		const oldCache = this[propCache];
 
+		// static property cache
 		let cache = ownKeys(this.proxied)
 			.reduce((acc, k) => {
 				acc[k] = {
@@ -336,13 +205,59 @@ export class Proxy {
 			.on('get', get)
 			.on('set', set);
 
-		// this.wrapLifestyleMethods(this.proxied.prototype);
 		this.proxied.prototype.constructor = this.proxied;
 		this.proxied.prototype.constructor.toString = Component.toString.bind(Component);
 
 		this[propCache] = cache;
 
 		return [...this.instances];
+	}
+
+	updateInstance(instance = {}, Component = this[constructor]) {
+
+		// initialize a new instance using the replacing component, including calling `componentWillMount`
+		const newInstance = new Component(instance.props);
+
+		if (newInstance.componentWillMount && !newInstance.componentWillMount.hasOwnProperty(reactProxy)) {
+			newInstance.componentWillMount();
+		}
+
+		const exclude = objectProtoKeys;
+		const flattened = new FlatObject(newInstance, exclude);
+
+		this.wrapLifestyleMethods(flattened);
+
+		flattened.state = instance.state || flattened.state || {};
+
+		if (!instance.hasOwnProperty(propCache)) {
+			defProp(instance, propCache, {
+				value: {}
+			});
+		}
+
+		controlledObject(flattened, instance, instance[propCache]);
+
+		ownKeys(flattened)
+			.map(k => getDescriptor(flattened, k))
+			.forEach(({get}) => get && defineProxyProp(get));
+
+		// for instance-descriptor tests, don't delete properties which aren't on the prototype of the Component.
+		// warning: I currently have no idea what this does and why it makes things work
+		const namesToExclude = Object.keys(instance).filter(k => {
+			const {get, set} = getDescriptor(instance, k);
+			const hasProxySymbol = [get, set].some(x => getProp(x, reactProxy));
+			return !hasProxySymbol;
+		});
+
+		cloneInto(instance, flattened, {
+			exclude: internals.concat(namesToExclude),
+			noDelete: true,
+			onDelete(k, target) {
+				deleteFromControlledOnbject(target, k, target[propCache]);
+			}
+		});
+
+		return instance;
 	}
 
 	get() {

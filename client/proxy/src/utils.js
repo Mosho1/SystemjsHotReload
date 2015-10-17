@@ -2,6 +2,13 @@
 
 const noop = () => null;
 
+export const ownKeys = obj => Object.getOwnPropertyNames(obj).concat(Object.getOwnPropertySymbols(obj));
+
+export const getProp = (obj, prop, defaultValue) =>
+	Array.isArray(prop)
+		? (prop.reduce((cur, p) => cur && cur[p], obj) || defaultValue)
+		: ((obj && obj[prop]) || defaultValue);
+
 export const cloneInto = (target, source, {mutate = true, exclude = [], onDefine, noDelete = false, enumerableOnly = false, onDelete, shouldDelete = noop, shouldDefine = noop} = {}) => {
 	let returnTarget = target;
 	const getKeys = enumerableOnly ? Object.keys : Reflect.ownKeys;

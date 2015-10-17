@@ -1,4 +1,5 @@
-const ownKeys = obj => Object.getOwnPropertyNames(obj).concat(Object.getOwnPropertySymbols(obj));
+import {ownKeys} from './utils';
+
 const getDescriptor = Object.getOwnPropertyDescriptor;
 const defProp = Object.defineProperty;
 

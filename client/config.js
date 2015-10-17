@@ -29,6 +29,7 @@ System.config({
     "babel-core": "npm:babel-core@5.8.25",
     "babel-runtime": "npm:babel-runtime@5.8.24",
     "core-js": "npm:core-js@0.9.18",
+    "eventemitter3": "npm:eventemitter3@1.1.1",
     "lodash": "npm:lodash@3.10.1",
     "react": "npm:react@0.13.3",
     "react-deep-force-update": "npm:react-deep-force-update@1.0.0",
