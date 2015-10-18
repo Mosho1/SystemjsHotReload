@@ -1,23 +1,15 @@
 import {cloneInto, ownKeys, getProp} from './utils';
-import autobind from 'autobind-decorator';
 import ObservableObject from './observable-object';
 import FlatObject from './flat-object';
 import {controlledObject, deleteFromControlledOnbject} from './controlled-object';
-import {} from './utils';
-import EE from 'eventemitter3';
+import EE from 'tiny-emitter';
+
 const noop = x => x;
 const getDescriptor = Object.getOwnPropertyDescriptor;
-const getProto = Object.getPrototypeOf;
 
 const objectProtoKeys = ownKeys(Object.getPrototypeOf({}));
-const functionProtoKeys = ownKeys(Object.getPrototypeOf(function(){}));
+const functionProtoKeys = ownKeys(Object.getPrototypeOf(function() {}));
 const internals = ['_reactInternalInstance', '__reactAutoBindMap', 'refs'];
-
-const propDefaults = {
-	enumerable: true,
-	configurable: true,
-	writable: true
-};
 
 const propCache = Symbol('propCache');
 const constructor = Symbol('constructor');
@@ -52,7 +44,6 @@ Function.prototype.bind = function(...args) {
 
 const defineProxyProp = (obj, desc) => defProp(obj, reactProxy, desc || {value: true});
 
-@autobind
 export class Proxy {
 	constructor(Component) {
 		this[constructor] = Component;
@@ -63,13 +54,13 @@ export class Proxy {
 			return instance;
 		};
 
+		// derived classes share instances cache
 		this.proxied.prototype.instances = this.instances = Component.prototype.instances || new Set();
-		this.proxied.prototypeSet = this.prototypeSet = Component.prototypeSet || new Set();
-		this.prototypeSet.add(this);
 
+		// this holds metadata about properties
 		this[propCache] = {};
-		this.proxied[propCache] = {};
 
+		// legacy react type property
 		this.proxied.type = this.proxied;
 
 		this.updateConstructor(Component);
@@ -91,10 +82,6 @@ export class Proxy {
 		const componentWillMount = component.componentWillMount || noop;
 		const componentWillUnmount = component.componentWillUnmount || noop;
 
-		if (component.componentWillMount && component.componentWillMount.hasOwnProperty(reactProxy)) {
-			return;
-		}
-
 		Object.assign(component, {
 			componentWillMount() {
 				componentWillMount.call(this);
@@ -105,13 +92,6 @@ export class Proxy {
 				instances.delete(this);
 			}
 		});
-
-
-		component.componentWillMount.toString = componentWillMount.toString.bind(componentWillMount);
-		component.componentWillUnmount.toString = componentWillUnmount.toString.bind(componentWillUnmount);
-
-		component.componentWillMount[reactProxy] = true;
-
 	}
 
 	update(Component) {
@@ -143,7 +123,7 @@ export class Proxy {
 		// update statics
 		const flatComponent = new FlatObject(Component, exclude);
 		cloneInto(this.proxied, flatComponent, {
-			exclude: ['type', 'prototypeSet', propCache, reactProxy],
+			exclude: ['type', reactProxy],
 			shouldDefine: (k, target) => {
 				const cached = this[propCache][k];
 				const isProxy = target.hasOwnProperty(reactProxy);

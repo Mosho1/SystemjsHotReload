@@ -1,17 +1,18 @@
 {
-  "name": "react-proxy",
-  "version": "1.1.1",
+  "name": "react-surrogate",
+  "version": "0.1.0",
   "description": "Proxies React components without unmounting or losing their state.",
   "main": "modules/index.js",
   "scripts": {
-    "test": "mocha --compilers js:babel/register ./test/atest.js --watch",
-    "regtest": "mocha --compilers js:babel/register ./test --watch"
+    "test": "mocha --compilers js:babel/register ./test/ --watch",
+    "build": "rimraf modules dist && webpack && babel src --out-dir modules",
+    "prepublish": "npm run build"
   },
   "repository": {
     "type": "git",
     "url": "https://github.com/gaearon/react-proxy.git"
   },
-  "author": "Dan Abramov <dan.abramov@me.com> (http://github.com/gaearon)",
+  "author": "Sharon Rolel <sharonrolel@gmail.com> (http://github.com/Mosho1)",
   "license": "MIT",
   "bugs": {
     "url": "https://github.com/gaearon/react-proxy/issues"
@@ -30,7 +31,6 @@
     "webpack": "1.4.8"
   },
   "dependencies": {
-    "lodash": "^3.7.0",
     "react-deep-force-update": "^1.0.0"
   }
 }

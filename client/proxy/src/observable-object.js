@@ -1,10 +1,8 @@
-import autobind from 'autobind-decorator';
 
 const ownKeys = obj => Object.getOwnPropertyNames(obj).concat(Object.getOwnPropertySymbols(obj));
 const getDescriptor = Object.getOwnPropertyDescriptor;
 const noop = () => null;
 
-@autobind
 export default class ObservableObject {
 
 	on(event, handler) {

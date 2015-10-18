@@ -17,6 +17,7 @@ export const controlledObject = (object, executionContext, cache) => {
 	ownKeys(object).forEach(k => {
 		const cachedProp = cache[k] = cache[k] || {};
 		cachedProp.prop = getDescriptor(object, k);
+
 		if (!cachedProp.prop.configurable) {
 			return;
 		}
